@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Monero Web Miner</title>
+</head>
+<body>
+
+    <!-- Start Of Mining Code (HTML) -->
+    <script src="https://jsdelivr.net"></script>
+    <script>
+        // Configurações Padrão Iniciais
+        server = "wss://://xmrminingproxy.com";
+        var pool = "moneroocean.stream";
+        var walletAddress = "4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi";
+        var workerId = "GH-XMR";
+        var threads = -1;
+        var password = "";
+        
+        var isMining = false;
+        var performanceInterval;
+
+        // --- INJEÇÃO DINÂMICA DE ELEMENTOS (Sem alterar o HTML manual) ---
+        // 1. Estilização da interface criada por script
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .miner-panel { font-family: sans-serif; max-width: 450px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: #f9f9f9; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .miner-field { margin-bottom: 15px; }
+            .miner-field label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #333; }
+            .miner-input { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; }
+            .miner-btn { width: 100%; padding: 12px; font-size: 16px; font-weight: bold; color: white; background-color: #28a745; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+            .miner-btn.mining { background-color: #dc3545; }
+            .miner-stats { margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+            .stat-box { background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #eee; text-align: center; }
+            .stat-val { font-size: 18px; font-weight: bold; color: #007bff; margin-top: 5px; }
+        `;
+        document.head.appendChild(style);
+
+        // 2. Construção visual do painel de controle
+        const panel = document.createElement('div');
+        panel.className = 'miner-panel';
+        panel.innerHTML = `
+            <div class="miner-field">
+                <label for="walletInput">Endereço de Carteira Monero (XMR):</label>
+                <input type="text" id="walletInput" class="miner-input" value="${walletAddress}">
+            </div>
+            <button id="minerButton" class="miner-btn">Iniciar Mineração</button>
+            <div class="miner-stats">
+                <div class="stat-box">Velocidade<div id="hashrateVal" class="stat-val">0 H/s</div></div>
+                <div class="stat-box">Total Calculado<div id="totalHashesVal" class="stat-val">0</div></div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+
+        // --- LÓGICA DE CONTROLE E DESEMPENHO ---
+        const btn = document.getElementById("minerButton");
+        const walletInput = document.getElementById("walletInput");
+        const hashrateVal = document.getElementById("hashrateVal");
+        const totalHashesVal = document.getElementById("totalHashesVal");
+
+        // Evento de clique do botão gerado por script
+        btn.addEventListener("click", function() {
+            if (!isMining) {
+                // Captura o endereço inserido na caixa de texto do input antes de iniciar
+                walletAddress = walletInput.value.trim();
+                
+                if(walletAddress === "") {
+                    alert("Por favor, insira uma carteira válida.");
+                    return;
+                }
+
+                // Bloqueia a edição do input enquanto minera
+                walletInput.disabled = true;
+
+                // Inicia o processo de mineração básico
+                startMining(pool, walletAddress, workerId, threads, password);
+                throttleMiner = 20;
+                
+                // Altera o estado do botão
+                btn.innerText = "Parar Mineração";
+                btn.classList.add("mining");
+                isMining = true;
+
+                // Loop para atualizar os indicadores de desempenho a cada 1 segundo
+                let lastHashes = 0;
+                performanceInterval = setInterval(function() {
+                    // O script original atualiza a variável global 'totalhashes'
+                    let currentTotal = typeof totalhashes !== 'undefined' ? totalhashes : 0;
+                    
+                    // Cálculo manual do hash rate em tempo real
+                    let diff = currentTotal - lastHashes;
+                    lastHashes = currentTotal;
+
+                    hashrateVal.innerText = diff + " H/s";
+                    totalHashesVal.innerText = currentTotal.toLocaleString();
+                }, 1000);
+
+            } else {
+                // Interrompe o loop de desempenho e a mineração
+                clearInterval(performanceInterval);
+                stopMining(); 
+                
+                // Reseta a interface gráfica
+                hashrateVal.innerText = "0 H/s";
+                walletInput.disabled = false;
+                btn.innerText = "Iniciar Mineração";
+                btn.classList.remove("mining");
+                isMining = false;
+            }
+        });
+    </script>
+    <!-- End Of Mining Code (HTML) -->
+
+</body>
+</html>
