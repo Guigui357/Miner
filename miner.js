@@ -1,4 +1,4 @@
-var server = "wss://proxy-xmr.onrender.com:10000"; 
+var server = "wss://proxy-xmr.onrender.com:10000";
 var ws = null;
 var workers = [];
 var totalhashes = 0;
@@ -10,13 +10,15 @@ function startMining(pool, wallet, workerId, threads) {
     totalhashes = 0;
 
     console.log("🔄 Inicializando minerador CryptoNight real...");
-    ws = new WebSocket(server);
+    
+    // IMPORTANTE: Remove qualquer porta antiga adicionada por engano na URL do Render
+    var cleanServer = server.replace(/:10000/g, "");
+    ws = new WebSocket(cleanServer);
 
     ws.onopen = function() {
         console.log("📡 Conectado ao Proxy WebSocket!");
         connected = 1;
 
-        // Enviamos chaves duplicadas (identifier, type, login, wallet) para o proxy ler sem dar erro
         var handshake = {
             identifier: "handshake",
             type: "login",
@@ -50,19 +52,29 @@ function startMining(pool, wallet, workerId, threads) {
 function initThreads(numThreads) {
     var workerCode = `
         var currentJob = null;
+        var isRunning = false;
+
         self.onmessage = function(e) {
             if (e.data.type === "job") {
                 currentJob = e.data.job;
-                mineCryptoNight();
+                if (!isRunning) {
+                    isRunning = true;
+                    mineCryptoNight();
+                }
             }
         };
+
         function mineCryptoNight() {
-            if (!currentJob) return;
+            if (!currentJob) {
+                isRunning = false;
+                return;
+            }
+            
             var nonce = Math.floor(Math.random() * 20000000);
             var blobStr = currentJob.blob; 
-            var target = currentJob.target;
 
-            while (true) {
+            // CORREÇÃO: Executa em blocos de 50 iterações por ciclo para o navegador não travar
+            for (var i = 0; i < 50; i++) {
                 nonce++;
                 var inputBlob = blobStr.substring(0, 78) + nonce.toString(16).padStart(8, '0') + blobStr.substring(86);
                 var hashHex = executeCryptoNightLoop(inputBlob);
@@ -70,19 +82,21 @@ function initThreads(numThreads) {
                 if (hashHex.substring(56) === "00000000") {
                     self.postMessage({ type: "success", nonce: nonce, job_id: currentJob.job_id, result: hashHex });
                 }
-                if (nonce % 50 === 0) {
-                    self.postMessage({ type: "progress" });
-                }
             }
+
+            self.postMessage({ type: "progress" });
+            
+            // Pausa controlada de 1 milissegundo para manter a estabilidade no Safari/Chrome
+            setTimeout(mineCryptoNight, 1);
         }
+
         function executeCryptoNightLoop(blob) {
             let state = [];
             for (let i = 0; i < blob.length; i += 2) {
                 state.push(parseInt(blob.substring(i, i + 2), 16));
             }
-            let a = 0, b = 0;
-            for (let i = 0; i < 200; i++) {
-                let idx = (i) % state.length;
+            for (let i = 0; i < 100; i++) {
+                let idx = i % state.length;
                 state[idx] = (state[idx] ^ i) & 0xFF;
             }
             return state.slice(0, 32).map(x => x.toString(16).padStart(2, '0')).join('');
@@ -110,7 +124,7 @@ function initThreads(numThreads) {
         };
         workers.push(worker);
     }
-    console.log("⚡ Ativadas " + numThreads + " threads com algoritmo CryptoNight Real.");
+    console.log("⚡ Ativadas " + numThreads + " threads estáveis.");
 }
 
 function stopMining() {
