@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monero Web Miner</title>
+<html lang="pt-BR" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Monero Webminer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
-        .miner-container { max-width: 400px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; margin: 20px auto; background: white; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; text-align: center; }
+        .miner-container { max-width: 400px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; margin: 20px auto; background: white; box-shadow: 0 4px 8px rgba(0,0,0,0.05); text-align: left; }
         .field { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
         input { width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace; border: 1px solid #ccc; border-radius: 4px; }
@@ -14,9 +15,14 @@
         .btn.mining { background: #dc3545; }
         .stats { margin-top: 15px; display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; }
     </style>
-</head>
-<body>
 
+    <!-- Chamando o script que possui o WASM embutido dentro dele -->
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+  </head>
+  <body>
+
+    <h1>Painel Monero Webminer</h1>
+    
     <div class="miner-container">
         <div class="field">
             <label>Endereço de Carteira XMR:</label>
@@ -31,10 +37,11 @@
         </div>
     </div>
 
-    <!-- Chama o arquivo miner.js que está na mesma pasta -->
-    <script src="miner.js"></script>
+    <p>Acompanhe seu progresso na pool <a href="https://moneroocean.stream" target="_blank">MoneroOcean</a></p>
 
     <script>
+        console.log("Config Loaded");
+        
         var isMining = false;
         var statsInterval;
 
@@ -47,20 +54,28 @@
             if (!isMining) {
                 var currentWallet = input.value.trim();
                 if (currentWallet === "") {
-                    alert("Por favor, digite uma carteira.");
+                    alert("Por favor, insira um endereço de carteira válido.");
                     return;
                 }
 
                 input.disabled = true;
 
-                // Executa as funções globais que existem dentro do seu miner.js
-                startMining("moneroocean.stream", currentWallet, "GH-XMR", -1, "");
+                // --- AJUSTE DOS PARÂMETROS DE CONEXÃO ---
+                server = "wss://ny1.xmrminingproxy.com"; // Endereço do Proxy WebSocket público
+                var pool = "gulf.moneroocean.stream:10004";
+                var workerId = "GH-XMR";
+                var threads = -1; // -1 faz o script usar os núcleos automáticos do navegador
+                var password = "";
+
+                // Aciona a mineração nativa contida na CDN
+                startMining(pool, currentWallet, workerId, threads, password);
+                throttleMiner = 20; // Limita em 20% o descanso da CPU para evitar travamentos
                 
                 btn.innerText = "Parar Mineração";
                 btn.classList.add("mining");
                 isMining = true;
 
-                // Loop que monitora a variável totalhashes nativa do miner.js
+                // Loop para renderizar e calcular a variação dos hashes na tela
                 let lastHashes = 0;
                 statsInterval = setInterval(function() {
                     if (typeof totalhashes !== 'undefined') {
@@ -70,12 +85,14 @@
 
                         hashrateTxt.innerText = diff + " H/s";
                         totalTxt.innerText = currentTotal;
+                    } else {
+                        hashrateTxt.innerText = "Conectando...";
                     }
                 }, 1000);
 
             } else {
                 clearInterval(statsInterval);
-                stopMining(); // Para a execução do miner.js
+                stopMining(); // Para a execução do script
                 
                 hashrateTxt.innerText = "0 H/s";
                 input.disabled = false;
@@ -85,5 +102,5 @@
             }
         }
     </script>
-</body>
+  </body>
 </html>
