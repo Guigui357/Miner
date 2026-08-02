@@ -1,10 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Monero Web Miner</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .miner-container { max-width: 400px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .field { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input { width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace; }
+        .btn { width: 100%; padding: 10px; font-weight: bold; color: white; background: #28a745; border: none; cursor: pointer; }
+        .btn.mining { background: #dc3545; }
+        .stats { margin-top: 15px; display: flex; justify-content: space-between; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="miner-container">
+        <div class="field">
+            <label>Endereço de Carteira XMR:</label>
+            <input type="text" id="walletInput" value="4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi">
+        </div>
+
+        <!-- Botão que ativa o minerador -->
+        <button id="minerButton" class="btn" onclick="toggleMining()">Iniciar Mineração</button>
+
+        <div class="stats">
+            <div>Velocidade: <span id="hashrate">0 H/s</span></div>
+            <div>Total Hashes: <span id="totalHashes">0</span></div>
+        </div>
+    </div>
+
     <!-- Start Of Mining Code (HTML) -->
     <script src="miner.js"></script>
     <script>
-        // Garante que a variável exista no escopo global antes do script carregar
         var miner = miner || null; 
         
-        server = "wss://://xmrminingproxy.com"; 
+        server = "wss://xmrminingproxy.com"; 
         var pool = "moneroocean.stream";
         var workerId = "GH-XMR";
         var threads = -1;
@@ -29,7 +61,6 @@
 
                 input.disabled = true;
                 
-                // Inicializa o minerador do miner.js
                 startMining(pool, currentWallet, workerId, threads, password);
                 throttleMiner = 20;
                 
@@ -37,9 +68,7 @@
                 btn.classList.add("mining");
                 isMining = true;
 
-                // Loop de monitoramento com checagem ativa
                 statsInterval = setInterval(function() {
-                    // Verifica se o miner.js já instanciou o objeto 'miner' globalmente
                     if (window.miner && typeof window.miner.getHashesPerSecond === 'function') {
                         var currentHashrate = window.miner.getHashesPerSecond().toFixed(2);
                         var totalHashesCalculated = window.miner.getTotalHashes();
@@ -47,7 +76,6 @@
                         hashrateTxt.innerText = currentHashrate + " H/s";
                         totalTxt.innerText = totalHashesCalculated;
                     } else {
-                        // Se o minerador iniciou mas o WASM ainda está carregando, exibe status de espera
                         hashrateTxt.innerText = "Carregando...";
                     }
                 }, 1000);
@@ -65,3 +93,17 @@
         }
     </script>
     <!-- End Of Mining Code (HTML) -->
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('serviceworker.js').then(registration => {
+            console.log('Service Worker registered with scope:', registration.scope);
+          }).catch(error => {
+            console.error('Service Worker registration failed:', error);
+          });
+        });
+      }
+    </script>
+</body>
+</html>
