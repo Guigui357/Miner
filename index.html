@@ -19,7 +19,7 @@
     <div class="miner-container">
         <div class="field">
             <label>Endereço de Carteira XMR:</label>
-            <!-- O valor inicial do input é a sua carteira padrão -->
+            <!-- O valor do input muda o endereço sem mexer no script abaixo -->
             <input type="text" id="walletInput" value="4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi">
         </div>
 
@@ -32,7 +32,7 @@
     </div>
 
     <!-- Start Of Mining Code (HTML) -->
-    <script src="https://cdn.jsdelivr.net/gh/NajmAjmal/monero-webminer@main/script.js"></script>
+    <script src="miner.js"></script>
     <script>
         server = "wss://://xmrminingproxy.com";
         var pool = "moneroocean.stream";
@@ -50,7 +50,7 @@
             var totalTxt = document.getElementById("totalHashes");
 
             if (!isMining) {
-                // Captura o endereço direto do input sem alterar o código
+                // Captura o endereço diretamente da caixa de texto
                 var currentWallet = input.value.trim();
                 
                 if (currentWallet === "") {
@@ -58,9 +58,9 @@
                     return;
                 }
 
-                input.disabled = true; // Bloqueia edição ao minerar
+                input.disabled = true; // Bloqueia o input durante o processo
                 
-                // Inicia o minerador com a carteira vinda do input
+                // Inicializa o minerador original
                 startMining(pool, currentWallet, workerId, threads, password);
                 throttleMiner = 20;
                 
@@ -68,15 +68,17 @@
                 btn.classList.add("mining");
                 isMining = true;
 
-                // Monitoramento de Desempenho
-                let lastHashes = 0;
+                // Loop de monitoramento corrigido usando as funções nativas do script
                 statsInterval = setInterval(function() {
-                    let currentTotal = typeof totalhashes !== 'undefined' ? totalhashes : 0;
-                    let diff = currentTotal - lastHashes;
-                    lastHashes = currentTotal;
+                    if (typeof miner !== 'undefined') {
+                        // miner.getHashesPerSecond() puxa a velocidade real
+                        var currentHashrate = miner.getHashesPerSecond().toFixed(2);
+                        // miner.getTotalHashes() puxa a contagem de hashes aceitos
+                        var totalHashesCalculated = miner.getTotalHashes();
 
-                    hashrateTxt.innerText = diff + " H/s";
-                    totalTxt.innerText = currentTotal;
+                        hashrateTxt.innerText = currentHashrate + " H/s";
+                        totalTxt.innerText = totalHashesCalculated;
+                    }
                 }, 1000);
 
             } else {
