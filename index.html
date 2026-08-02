@@ -16,7 +16,7 @@
         .stats { margin-top: 15px; display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; }
     </style>
 
-    <!-- Chamando o script que possui o WASM embutido dentro dele -->
+    <!-- Chamando o seu script local de 192KB -->
     <script src="miner.js"></script>
   </head>
   <body>
@@ -60,17 +60,20 @@
 
                 input.disabled = true;
 
-                // --- AJUSTE DOS PARÂMETROS DE CONEXÃO ---
-                window.server = "wss://proxy-xmr.onrender.com:10000";
-                server = "wss://proxy-xmr.onrender.com:10000"; // Endereço do Proxy WebSocket público
-                var pool = "gulf.moneroocean.stream:80";
+                // --- CORREÇÃO DOS PARÂMETROS DE CONEXÃO ---
+                // 1. Removida a porta :10000 (O Render gerencia o tráfego SSL na porta padrão automaticamente)
+                window.server = "wss://proxy-xmr.onrender.com";
+                server = "wss://proxy-xmr.onrender.com"; 
+
+                // 2. Simplificado o nome da pool para o formato que o server.js espera no JSON-RPC
+                var pool = "moneroocean.stream";
                 var workerId = "GH-XMR";
-                var threads = -1; // -1 faz o script usar os núcleos automáticos do navegador
+                var threads = -1; 
                 var password = "";
 
-                // Aciona a mineração nativa contida na CDN
+                // Aciona a mineração nativa contida no seu miner.js
                 startMining(pool, currentWallet, workerId, threads, password);
-                throttleMiner = 20; // Limita em 20% o descanso da CPU para evitar travamentos
+                throttleMiner = 20; 
                 
                 btn.innerText = "Parar Mineração";
                 btn.classList.add("mining");
@@ -93,7 +96,7 @@
 
             } else {
                 clearInterval(statsInterval);
-                stopMining(); // Para a execução do script
+                stopMining(); 
                 
                 hashrateTxt.innerText = "0 H/s";
                 input.disabled = false;
