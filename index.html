@@ -2,16 +2,17 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monero Web Miner</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .miner-container { max-width: 400px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .miner-container { max-width: 400px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; margin: 20px auto; background: white; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .field { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input { width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace; }
-        .btn { width: 100%; padding: 10px; font-weight: bold; color: white; background: #28a745; border: none; cursor: pointer; }
+        input { width: 100%; padding: 8px; box-sizing: border-box; font-family: monospace; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { width: 100%; padding: 10px; font-weight: bold; color: white; background: #28a745; border: none; border-radius: 4px; cursor: pointer; }
         .btn.mining { background: #dc3545; }
-        .stats { margin-top: 15px; display: flex; justify-content: space-between; font-size: 14px; }
+        .stats { margin-top: 15px; display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -22,7 +23,6 @@
             <input type="text" id="walletInput" value="4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi">
         </div>
 
-        <!-- Botão que ativa o minerador -->
         <button id="minerButton" class="btn" onclick="toggleMining()">Iniciar Mineração</button>
 
         <div class="stats">
@@ -31,17 +31,10 @@
         </div>
     </div>
 
-    <!-- Start Of Mining Code (HTML) -->
+    <!-- Chama o arquivo miner.js que está na mesma pasta -->
     <script src="miner.js"></script>
+
     <script>
-        var miner = miner || null; 
-        
-        server = "wss://xmrminingproxy.com"; 
-        var pool = "moneroocean.stream";
-        var workerId = "GH-XMR";
-        var threads = -1;
-        var password = "";
-        
         var isMining = false;
         var statsInterval;
 
@@ -53,36 +46,36 @@
 
             if (!isMining) {
                 var currentWallet = input.value.trim();
-                
                 if (currentWallet === "") {
                     alert("Por favor, digite uma carteira.");
                     return;
                 }
 
                 input.disabled = true;
-                
-                startMining(pool, currentWallet, workerId, threads, password);
-                throttleMiner = 20;
+
+                // Executa as funções globais que existem dentro do seu miner.js
+                startMining("moneroocean.stream", currentWallet, "GH-XMR", -1, "");
                 
                 btn.innerText = "Parar Mineração";
                 btn.classList.add("mining");
                 isMining = true;
 
+                // Loop que monitora a variável totalhashes nativa do miner.js
+                let lastHashes = 0;
                 statsInterval = setInterval(function() {
-                    if (window.miner && typeof window.miner.getHashesPerSecond === 'function') {
-                        var currentHashrate = window.miner.getHashesPerSecond().toFixed(2);
-                        var totalHashesCalculated = window.miner.getTotalHashes();
+                    if (typeof totalhashes !== 'undefined') {
+                        var currentTotal = totalhashes;
+                        var diff = currentTotal - lastHashes;
+                        lastHashes = currentTotal;
 
-                        hashrateTxt.innerText = currentHashrate + " H/s";
-                        totalTxt.innerText = totalHashesCalculated;
-                    } else {
-                        hashrateTxt.innerText = "Carregando...";
+                        hashrateTxt.innerText = diff + " H/s";
+                        totalTxt.innerText = currentTotal;
                     }
                 }, 1000);
 
             } else {
                 clearInterval(statsInterval);
-                stopMining(); 
+                stopMining(); // Para a execução do miner.js
                 
                 hashrateTxt.innerText = "0 H/s";
                 input.disabled = false;
@@ -91,19 +84,6 @@
                 isMining = false;
             }
         }
-    </script>
-    <!-- End Of Mining Code (HTML) -->
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('serviceworker.js').then(registration => {
-            console.log('Service Worker registered with scope:', registration.scope);
-          }).catch(error => {
-            console.error('Service Worker registration failed:', error);
-          });
-        });
-      }
     </script>
 </body>
 </html>
