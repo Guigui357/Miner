@@ -63,7 +63,7 @@ function GROWABLE_HEAP_F64() {
 // after the generated code, you will need to define   var Module = {};
 // before the code. Then that object will be used in the code, and you
 // can continue to use Module afterwards as well.
-var Module = typeof Module != "undefined" ? Module : {};
+var Module = typeof MinerModule != "undefined" ? MinerModule : {};
 
 // Determine the runtime environment we are in. You can customize this by
 // setting the ENVIRONMENT setting at compile time (see settings.js).
@@ -90,19 +90,6 @@ if (Module["ENVIRONMENT"]) {
 // it with a specific name.
 var ENVIRONMENT_IS_PTHREAD = ENVIRONMENT_IS_WORKER && self.name == "em-pthread";
 
-if (ENVIRONMENT_IS_NODE) {
-  // `require()` is no-op in an ESM module, use `createRequire()` to construct
-  // the require()` function.  This is only necessary for multi-environment
-  // builds, `-sENVIRONMENT=node` emits a static import declaration instead.
-  // TODO: Swap all `require()`'s with `import()`'s?
-  var worker_threads = require("worker_threads");
-  global.Worker = worker_threads.Worker;
-  ENVIRONMENT_IS_WORKER = !worker_threads.isMainThread;
-  // Under node we set `workerData` to `em-pthread` to signal that the worker
-  // is hosting a pthread.
-  ENVIRONMENT_IS_PTHREAD = ENVIRONMENT_IS_WORKER && worker_threads["workerData"] == "em-pthread";
-}
-
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
 // Sometimes an existing Module object exists with properties
@@ -124,9 +111,7 @@ var quit_ = (status, toThrow) => {
 // before the page load. In non-MODULARIZE modes generate it here.
 var _scriptName = (typeof document != "undefined") ? document.currentScript?.src : undefined;
 
-if (ENVIRONMENT_IS_NODE) {
-  _scriptName = __filename;
-} else if (ENVIRONMENT_IS_WORKER) {
+if (ENVIRONMENT_IS_WORKER) {
   _scriptName = self.location.href;
 }
 
@@ -140,57 +125,7 @@ function locateFile(path) {
 // Hooks that are implemented differently in different runtime environments.
 var readAsync, readBinary;
 
-if (ENVIRONMENT_IS_NODE) {
-  if (typeof process == "undefined" || !process.release || process.release.name !== "node") throw new Error("not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)");
-  var nodeVersion = process.versions.node;
-  var numericVersion = nodeVersion.split(".").slice(0, 3);
-  numericVersion = (numericVersion[0] * 1e4) + (numericVersion[1] * 100) + (numericVersion[2].split("-")[0] * 1);
-  var minVersion = 16e4;
-  if (numericVersion < 16e4) {
-    throw new Error("This emscripten-generated code requires node v16.0.0 (detected v" + nodeVersion + ")");
-  }
-  // These modules will usually be used on Node.js. Load them eagerly to avoid
-  // the complexity of lazy-loading.
-  var fs = require("fs");
-  var nodePath = require("path");
-  scriptDirectory = __dirname + "/";
-  // include: node_shell_read.js
-  readBinary = filename => {
-    // We need to re-wrap `file://` strings to URLs. Normalizing isn't
-    // necessary in that case, the path should already be absolute.
-    filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-    var ret = fs.readFileSync(filename);
-    assert(ret.buffer);
-    return ret;
-  };
-  readAsync = (filename, binary = true) => {
-    // See the comment in the `readBinary` function.
-    filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
-    return new Promise((resolve, reject) => {
-      fs.readFile(filename, binary ? undefined : "utf8", (err, data) => {
-        if (err) reject(err); else resolve(binary ? data.buffer : data);
-      });
-    });
-  };
-  // end include: node_shell_read.js
-  if (!Module["thisProgram"] && process.argv.length > 1) {
-    thisProgram = process.argv[1].replace(/\\/g, "/");
-  }
-  arguments_ = process.argv.slice(2);
-  if (typeof module != "undefined") {
-    module["exports"] = Module;
-  }
-  process.on("uncaughtException", ex => {
-    // suppress ExitStatus exceptions from showing an error
-    if (ex !== "unwind" && !(ex instanceof ExitStatus) && !(ex.context instanceof ExitStatus)) {
-      throw ex;
-    }
-  });
-  quit_ = (status, toThrow) => {
-    process.exitCode = status;
-    throw toThrow;
-  };
-} else if (ENVIRONMENT_IS_SHELL) {
+if (ENVIRONMENT_IS_SHELL) {
   if ((typeof process == "object" && typeof require === "function") || typeof window == "object" || typeof importScripts == "function") throw new Error("not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)");
 } else // Note that this includes Node.js workers when relevant (pthreads is enabled).
 // Node.js workers are detected as a combination of ENVIRONMENT_IS_WORKER and
@@ -215,9 +150,7 @@ if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
     scriptDirectory = scriptDirectory.substr(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf("/") + 1);
   }
   if (!(typeof window == "object" || typeof importScripts == "function")) throw new Error("not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)");
-  // Differentiate the Web Worker from the Node Worker case, as reading must
-  // be done differently.
-  if (!ENVIRONMENT_IS_NODE) {
+  {
     // include: web_or_worker_shell_read.js
     if (ENVIRONMENT_IS_WORKER) {
       readBinary = url => {
@@ -229,26 +162,7 @@ if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
       };
     }
     readAsync = url => {
-      // Fetch has some additional restrictions over XHR, like it can't be used on a file:// url.
-      // See https://github.com/github/fetch/pull/92#issuecomment-140665932
-      // Cordova or Electron apps are typically loaded from a file:// url.
-      // So use XHR on webview if URL is a file URL.
-      if (isFileURI(url)) {
-        return new Promise((reject, resolve) => {
-          var xhr = new XMLHttpRequest;
-          xhr.open("GET", url, true);
-          xhr.responseType = "arraybuffer";
-          xhr.onload = () => {
-            if (xhr.status == 200 || (xhr.status == 0 && xhr.response)) {
-              // file URLs can return 0
-              resolve(xhr.response);
-            }
-            reject(xhr.status);
-          };
-          xhr.onerror = reject;
-          xhr.send(null);
-        });
-      }
+      assert(!isFileURI(url), "readAsync does not work with file:// URLs");
       return fetch(url, {
         credentials: "same-origin"
       }).then(response => {
@@ -264,32 +178,9 @@ if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
   throw new Error("environment detection error");
 }
 
-if (ENVIRONMENT_IS_NODE) {
-  // Polyfill the performance object, which emscripten pthreads support
-  // depends on for good timing.
-  if (typeof performance == "undefined") {
-    global.performance = require("perf_hooks").performance;
-  }
-}
+var out = Module["print"] || console.log.bind(console);
 
-// Set up the out() and err() hooks, which are how we can print to stdout or
-// stderr, respectively.
-// Normally just binding console.log/console.error here works fine, but
-// under node (with workers) we see missing/out-of-order messages so route
-// directly to stdout and stderr.
-// See https://github.com/emscripten-core/emscripten/issues/14804
-var defaultPrint = console.log.bind(console);
-
-var defaultPrintErr = console.error.bind(console);
-
-if (ENVIRONMENT_IS_NODE) {
-  defaultPrint = (...args) => fs.writeSync(1, args.join(" ") + "\n");
-  defaultPrintErr = (...args) => fs.writeSync(2, args.join(" ") + "\n");
-}
-
-var out = Module["print"] || defaultPrint;
-
-var err = Module["printErr"] || defaultPrintErr;
+var err = Module["printErr"] || console.error.bind(console);
 
 // Merge back in the overrides
 Object.assign(Module, moduleOverrides);
@@ -356,6 +247,8 @@ var NODEFS = "NODEFS is no longer included by default; build with -lnodefs.js";
 
 assert(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER || ENVIRONMENT_IS_NODE, "Pthreads do not work in this environment yet (need Web Workers, or an alternative to them)");
 
+assert(!ENVIRONMENT_IS_NODE, "node environment detected but not enabled at build time.  Add `node` to `-sENVIRONMENT` to enable.");
+
 assert(!ENVIRONMENT_IS_SHELL, "shell environment detected but not enabled at build time.  Add `shell` to `-sENVIRONMENT` to enable.");
 
 // end include: shell.js
@@ -380,36 +273,10 @@ if (ENVIRONMENT_IS_PTHREAD) {
   var wasmPromiseResolve;
   var wasmPromiseReject;
   var receivedWasmModule;
-  // Node.js support
-  if (ENVIRONMENT_IS_NODE) {
-    // Create as web-worker-like an environment as we can.
-    var parentPort = worker_threads["parentPort"];
-    parentPort.on("message", data => onmessage({
-      data: data
-    }));
-    Object.assign(globalThis, {
-      self: global,
-      // Dummy importScripts.  The presence of this global is used
-      // to detect that we are running on a Worker.
-      // TODO(sbc): Find another way?
-      importScripts: () => {
-        assert(false, "dummy importScripts called");
-      },
-      postMessage: msg => parentPort.postMessage(msg),
-      performance: global.performance || {
-        now: Date.now
-      }
-    });
-  }
   // Thread-local guard variable for one-time init of the JS state
   var initializedJS = false;
   function threadPrintErr(...args) {
     var text = args.join(" ");
-    // See https://github.com/emscripten-core/emscripten/issues/14804
-    if (ENVIRONMENT_IS_NODE) {
-      fs.writeSync(2, text + "\n");
-      return;
-    }
     console.error(text);
   }
   if (!Module["printErr"]) err = threadPrintErr;
@@ -934,13 +801,7 @@ function instantiateArrayBuffer(binaryFile, imports, receiver) {
 }
 
 function instantiateAsync(binary, binaryFile, imports, callback) {
-  if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && // Don't use streaming for file:// delivered objects in a webview, fetch them synchronously.
-  !isFileURI(binaryFile) && // Avoid instantiateStreaming() on Node.js environment for now, as while
-  // Node.js v18.1.0 implements it, it does not have a full fetch()
-  // implementation yet.
-  // Reference:
-  //   https://github.com/emscripten-core/emscripten/pull/16917
-  !ENVIRONMENT_IS_NODE && typeof fetch == "function") {
+  if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile) && typeof fetch == "function") {
     return fetch(binaryFile, {
       credentials: "same-origin"
     }).then(response => {
@@ -1102,11 +963,7 @@ function unexportedRuntimeSymbol(sym) {
 
 // Used by XXXXX_DEBUG settings to output debug messages.
 function dbg(...args) {
-  // Avoid using the console for debugging in multi-threaded node applications
-  // See https://github.com/emscripten-core/emscripten/issues/14804
-  if (ENVIRONMENT_IS_NODE && fs) {
-    fs.writeSync(2, args.join(" ") + "\n");
-  } else // TODO(sbc): Make this configurable somehow.  Its not always convenient for
+  // TODO(sbc): Make this configurable somehow.  Its not always convenient for
   // logging to show up as warnings.
   console.warn(...args);
 }
@@ -1188,13 +1045,6 @@ var spawnThread = threadParams => {
     "arg": threadParams.arg,
     "pthread_ptr": threadParams.pthread_ptr
   };
-  if (ENVIRONMENT_IS_NODE) {
-    // Mark worker as weakly referenced once we start executing a pthread,
-    // so that its existence does not prevent Node.js from exiting.  This
-    // has no effect if the worker is already weakly referenced (e.g. if
-    // this worker was previously idle/unused).
-    worker.unref();
-  }
   // Ask the worker to start executing its pthread entry point function.
   worker.postMessage(msg, threadParams.transferList);
   return 0;
@@ -1389,13 +1239,6 @@ var PThread = {
     // Detach the worker from the pthread object, and return it to the
     // worker pool as an unused worker.
     worker.pthread_ptr = 0;
-    if (ENVIRONMENT_IS_NODE) {
-      // Once the proxied main thread has finished, mark it as weakly
-      // referenced so that its existence does not prevent Node.js from
-      // exiting.  This has no effect if the worker is already weakly
-      // referenced.
-      worker.unref();
-    }
     // Finally, free the underlying (and now-unused) pthread structure in
     // linear memory.
     __emscripten_thread_free_data(pthread_ptr);
@@ -1457,12 +1300,6 @@ var PThread = {
       err(`${message} ${e.filename}:${e.lineno}: ${e.message}`);
       throw e;
     };
-    if (ENVIRONMENT_IS_NODE) {
-      worker.on("message", data => worker.onmessage({
-        data: data
-      }));
-      worker.on("error", e => worker.onerror(e));
-    }
     assert(wasmMemory instanceof WebAssembly.Memory, "WebAssembly memory should have been loaded by now!");
     assert(wasmModule instanceof WebAssembly.Module, "WebAssembly Module should have been loaded by now!");
     // When running on a pthread, none of the incoming parameters on the module
@@ -1490,9 +1327,6 @@ var PThread = {
   allocateUnusedWorker() {
     var worker;
     var workerOptions = {
-      // This is the way that we signal to the node worker that it is hosting
-      // a pthread.
-      "workerData": "em-pthread",
       // This is the way that we signal to the Web Worker that it is hosting
       // a pthread.
       "name": "em-pthread"
@@ -1664,7 +1498,6 @@ var warnOnce = text => {
   warnOnce.shown ||= {};
   if (!warnOnce.shown[text]) {
     warnOnce.shown[text] = 1;
-    if (ENVIRONMENT_IS_NODE) text = "warning: " + text;
     err(text);
   }
 };
@@ -1950,22 +1783,7 @@ var initRandomFill = () => {
     return view => (view.set(crypto.getRandomValues(new Uint8Array(view.byteLength))), 
     // Return the original view to match modern native implementations.
     view);
-  } else if (ENVIRONMENT_IS_NODE) {
-    // for nodejs with or without crypto support included
-    try {
-      var crypto_module = require("crypto");
-      var randomFillSync = crypto_module["randomFillSync"];
-      if (randomFillSync) {
-        // nodejs with LTS crypto support
-        return view => crypto_module["randomFillSync"](view);
-      }
-      // very old nodejs with the original crypto API
-      var randomBytes = crypto_module["randomBytes"];
-      return view => (view.set(randomBytes(view.byteLength)), // Return the original view to match modern native implementations.
-      view);
-    } catch (e) {}
-  }
-  // we couldn't find a proper implementation, as Math.random() is not suitable for /dev/random, see emscripten-core/emscripten/pull/7096
+  } else // we couldn't find a proper implementation, as Math.random() is not suitable for /dev/random, see emscripten-core/emscripten/pull/7096
   abort("no cryptographic support found for randomDevice. consider polyfilling it if you want to use something insecure like Math.random(), e.g. put this in a --pre-js: var crypto = { getRandomValues: (array) => { for (var i = 0; i < array.length; i++) array[i] = (Math.random()*256)|0 } };");
 };
 
@@ -2109,30 +1927,7 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
 var FS_stdin_getChar = () => {
   if (!FS_stdin_getChar_buffer.length) {
     var result = null;
-    if (ENVIRONMENT_IS_NODE) {
-      // we will read data by chunks of BUFSIZE
-      var BUFSIZE = 256;
-      var buf = Buffer.alloc(BUFSIZE);
-      var bytesRead = 0;
-      // For some reason we must suppress a closure warning here, even though
-      // fd definitely exists on process.stdin, and is even the proper way to
-      // get the fd of stdin,
-      // https://github.com/nodejs/help/issues/2136#issuecomment-523649904
-      // This started to happen after moving this logic out of library_tty.js,
-      // so it is related to the surrounding code in some unclear manner.
-      /** @suppress {missingProperties} */ var fd = process.stdin.fd;
-      try {
-        bytesRead = fs.readSync(fd, buf, 0, BUFSIZE);
-      } catch (e) {
-        // Cross-platform differences: on Windows, reading EOF throws an
-        // exception, but on other OSes, reading EOF returns 0. Uniformize
-        // behavior by treating the EOF exception to return 0.
-        if (e.toString().includes("EOF")) bytesRead = 0; else throw e;
-      }
-      if (bytesRead > 0) {
-        result = buf.slice(0, bytesRead).toString("utf-8");
-      }
-    } else if (typeof window != "undefined" && typeof window.prompt == "function") {
+    if (typeof window != "undefined" && typeof window.prompt == "function") {
       // Browser.
       result = window.prompt("Input: ");
       // returns null on cancel
@@ -4944,17 +4739,13 @@ var __emscripten_thread_cleanup = thread => {
   });
 };
 
-var __emscripten_thread_set_strongref = thread => {
-  // Called when a thread needs to be strongly referenced.
-  // Currently only used for:
-  // - keeping the "main" thread alive in PROXY_TO_PTHREAD mode;
-  // - crashed threads that needs to propagate the uncaught exception
-  //   back to the main thread.
-  if (ENVIRONMENT_IS_NODE) {
-    PThread.pthreads[thread].ref();
-  }
-};
+var __emscripten_thread_set_strongref = thread => {};
 
+// Called when a thread needs to be strongly referenced.
+// Currently only used for:
+// - keeping the "main" thread alive in PROXY_TO_PTHREAD mode;
+// - crashed threads that needs to propagate the uncaught exception
+//   back to the main thread.
 var isLeapYear = year => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 
 var MONTH_DAYS_LEAP_CUMULATIVE = [ 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 ];
@@ -5073,7 +4864,6 @@ var __tzset_js = (timezone, daylight, std_name, dst_name) => {
 };
 
 var _emscripten_check_blocking_allowed = () => {
-  if (ENVIRONMENT_IS_NODE) return;
   if (ENVIRONMENT_IS_WORKER) return;
   // Blocking in a worker/pthread is fine.
   warnOnce("Blocking on the main thread is very dangerous, see https://emscripten.org/docs/porting/pthreads.html#blocking-on-the-main-browser-thread");
@@ -5101,7 +4891,7 @@ var _emscripten_get_now;
 // respective time origins.
 _emscripten_get_now = () => performance.timeOrigin + performance.now();
 
-var _emscripten_num_logical_cores = () => ENVIRONMENT_IS_NODE ? require("os").cpus().length : navigator["hardwareConcurrency"];
+var _emscripten_num_logical_cores = () => navigator["hardwareConcurrency"];
 
 var growMemory = size => {
   var b = wasmMemory.buffer;
