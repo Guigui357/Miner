@@ -1,16 +1,9 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monero WASM Miner</title>
-    <!-- ADICIONE ESSA LINHA AQUI NO TOPO: -->
-    <script src="coi-serviceworker.js"></script>
-    <script>
-        // Força a página a parar aqui se o COI ainda estiver registrando o Service Worker
-        if (window.crossOriginIsolated === false) {
-            console.log("[SISTEMA] Aguardando o COI Service Worker isolar a página...");
-        }
-    </script>
-
     <style>
         :root {
             --bg-color: #121212;
@@ -121,7 +114,7 @@
             border: 1px solid #333;
             border-radius: 4px;
             padding: 15px;
-            height: 300px;
+            height: 320px;
             overflow-y: auto;
             font-family: 'Consolas', 'Courier New', monospace;
             font-size: 13px;
@@ -144,7 +137,7 @@
     <div class="container">
         <h1>Monero Web Miner (WASM + Threads)</h1>
         
-        <!-- Campo Dinâmico para Configuração da Carteira XMR -->
+        <!-- Configuração de inputs do usuário -->
         <div class="input-group">
             <label for="walletInput">Endereço da Carteira Monero (XMR):</label>
             <input type="text" id="walletInput" placeholder="Ex: 4657q4dnsjLWtzeW4XN3wG9..." value="4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi">
@@ -161,12 +154,12 @@
 
         <div class="console-label">Terminal de Saída:</div>
         <div class="console" id="logConsole">
-            <div class="log-entry log-info">[SISTEMA] Aguardando inicialização do ambiente WebAssembly...</div>
+            <div class="log-entry log-info">[SISTEMA] Inicializando ambiente e carregando runtime do WebAssembly...</div>
         </div>
     </div>
 
+    <!-- 1. Configuração de ganchos do MinerModule ANTES do script carregar -->
     <script>
-        // 2. Só inicializa o Module se a página já estiver em ambiente isolado e seguro
         const logConsole = document.getElementById('logConsole');
 
         function appendToConsole(text, type = 'wasm') {
@@ -178,26 +171,33 @@
             logConsole.scrollTop = logConsole.scrollHeight;
         }
 
-        window.Module = {
+        // Casamento perfeito com o EXPORT_NAME="MinerModule" definido no seu Makefile
+        window.MinerModule = {
             print: function(text) {
                 console.log(text);
                 appendToConsole(text, 'wasm');
             },
             printErr: function(text) {
                 console.error(text);
+                // Evita espalhar logs de warnings irrelevantes na interface
                 if (!text.includes("missing function") && !text.includes("deprecated")) {
                     appendToConsole(text, 'error');
                 }
             },
             onRuntimeInitialized: function() {
-                appendToConsole("[SISTEMA] Módulo WebAssembly e ambiente Worker prontos!", 'info');
+                appendToConsole("[SISTEMA] Módulo WebAssembly e pool de threads inicializados com sucesso na Cloud Vercel!", 'info');
                 document.getElementById('startBtn').disabled = false;
             }
         };
+
+        // Redirecionamento de segurança para o Emscripten mapear as saídas locais
+        window.Module = window.MinerModule;
     </script>
 
+    <!-- 2. Leitura do orquestrador JavaScript nativo gerado pelo compilador -->
     <script src="bin/miner.js"></script>
 
+    <!-- 3. Controle e envio de parâmetros da carteira para o motor C++ -->
     <script>
         document.getElementById('startBtn').addEventListener('click', () => {
             const startBtn = document.getElementById('startBtn');
@@ -205,37 +205,33 @@
             const workerName = document.getElementById('workerInput').value.trim();
 
             if (!walletAddress) {
-                appendToConsole("[ERRO] Você precisa inserir uma carteira Monero válida!", "error");
+                appendToConsole("[ERRO] Por favor, insira uma carteira Monero antes de iniciar.", "error");
                 return;
             }
 
             startBtn.disabled = true;
-            appendToConsole("[SISTEMA] Enviando parâmetros e iniciando thread C++...", 'info');
+            appendToConsole("[SISTEMA] Alocando memória e disparando 'startMining' via ccall...", 'info');
 
             try {
                 let success = false;
+                const targetModule = window.MinerModule || window.Module;
 
-                // Como strings em C++ são ponteiros de memória em WebAssembly, 
-                // a forma correta e padrão do Emscripten injetar textos é usando o 'ccall'
-                if (typeof Module.ccall === "function") {
-                    success = Module.ccall(
-                        'startMining',       // Nome da função no C++
-                        'boolean',           // Tipo de retorno
-                        ['string', 'string'],// Tipos dos argumentos passados
-                        [walletAddress, workerName] // Os valores dos argumentos
+                // Executa a injeção segura de strings via ccall do Emscripten
+                if (targetModule && typeof targetModule.ccall === "function") {
+                    success = targetModule.ccall(
+                        'startMining',       // Assinatura exposta via extern "C"
+                        'boolean',           // Tipo retornado pelo método
+                        ['string', 'string'],// Assinatura dos tipos dos argumentos
+                        [walletAddress, workerName] // Dados capturados dos inputs do formulário
                     );
-                } 
-                else if (typeof ccall === "function") {
-                    success = ccall('startMining', 'boolean', ['string', 'string'], [walletAddress, workerName]);
-                } 
-                else {
-                    throw new Error("A API de encapsulamento síncrono (ccall) não está acessível nesta janela.");
+                } else {
+                    throw new Error("O subsistema de controle de memória das threads não está pronto.");
                 }
 
                 if (success) {
-                    appendToConsole("[SISTEMA] 🚀 Motor de mineração rodando em segundo plano com a sua carteira!", 'info');
+                    appendToConsole("[SISTEMA] 🚀 Sucesso! O loop do minerador foi ativado em background nas threads filhas.", 'info');
                 } else {
-                    appendToConsole("[SISTEMA] ❌ O startMining() retornou falso. Verifique os logs internos.", 'error');
+                    appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a chamada ou falhou internamente.", 'error');
                     startBtn.disabled = false;
                 }
 
