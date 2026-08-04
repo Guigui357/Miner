@@ -5673,7 +5673,7 @@ var wasmExports = createWasm();
 
 var ___wasm_call_ctors = createExportWrapper("__wasm_call_ctors", 0);
 
-var _startMining = Module["_startMining"] = createExportWrapper("startMining", 0);
+var _startMining = Module["_startMining"] = createExportWrapper("startMining", 2);
 
 var _main = createExportWrapper("__main_argc_argv", 2);
 
