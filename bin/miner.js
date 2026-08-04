@@ -63,7 +63,7 @@ function GROWABLE_HEAP_F64() {
 // after the generated code, you will need to define   var Module = {};
 // before the code. Then that object will be used in the code, and you
 // can continue to use Module afterwards as well.
-var Module = typeof MinerModule != "undefined" ? MinerModule : {};
+var Module = typeof Module != "undefined" ? Module : {};
 
 // Determine the runtime environment we are in. You can customize this by
 // setting the ENVIRONMENT setting at compile time (see settings.js).
@@ -119,6 +119,9 @@ if (ENVIRONMENT_IS_WORKER) {
 var scriptDirectory = "";
 
 function locateFile(path) {
+  if (Module["locateFile"]) {
+    return Module["locateFile"](path, scriptDirectory);
+  }
   return scriptDirectory + path;
 }
 
@@ -195,9 +198,15 @@ checkIncomingModuleAPI();
 // to the proper local x. This has two benefits: first, we only emit it if it is
 // expected to arrive, and second, by using a local everywhere else that can be
 // minified.
+if (Module["arguments"]) arguments_ = Module["arguments"];
+
 legacyModuleProp("arguments", "arguments_");
 
+if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
+
 legacyModuleProp("thisProgram", "thisProgram");
+
+if (Module["quit"]) quit_ = Module["quit"];
 
 legacyModuleProp("quit", "quit_");
 
@@ -409,6 +418,8 @@ if (ENVIRONMENT_IS_PTHREAD) {
 // end include: runtime_pthread.js
 var wasmBinary;
 
+if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
+
 legacyModuleProp("wasmBinary", "wasmBinary");
 
 if (typeof WebAssembly != "object") {
@@ -471,8 +482,10 @@ assert(typeof Int32Array != "undefined" && typeof Float64Array !== "undefined" &
 // Create the wasm memory. (Note: this only applies if IMPORTED_MEMORY is defined)
 // check for full engine support (use string 'subarray' to avoid closure compiler confusion)
 if (!ENVIRONMENT_IS_PTHREAD) {
-  {
-    var INITIAL_MEMORY = 536870912;
+  if (Module["wasmMemory"]) {
+    wasmMemory = Module["wasmMemory"];
+  } else {
+    var INITIAL_MEMORY = Module["INITIAL_MEMORY"] || 536870912;
     legacyModuleProp("INITIAL_MEMORY", "INITIAL_MEMORY");
     assert(INITIAL_MEMORY >= 65536, "INITIAL_MEMORY should be larger than STACK_SIZE, was " + INITIAL_MEMORY + "! (STACK_SIZE=" + 65536 + ")");
     wasmMemory = new WebAssembly.Memory({
@@ -566,6 +579,12 @@ var runtimeInitialized = false;
 function preRun() {
   assert(!ENVIRONMENT_IS_PTHREAD);
   // PThreads reuse the runtime from the main thread.
+  if (Module["preRun"]) {
+    if (typeof Module["preRun"] == "function") Module["preRun"] = [ Module["preRun"] ];
+    while (Module["preRun"].length) {
+      addOnPreRun(Module["preRun"].shift());
+    }
+  }
   callRuntimeCallbacks(__ATPRERUN__);
 }
 
@@ -591,6 +610,12 @@ function postRun() {
   checkStackCookie();
   if (ENVIRONMENT_IS_PTHREAD) return;
   // PThreads reuse the runtime from the main thread.
+  if (Module["postRun"]) {
+    if (typeof Module["postRun"] == "function") Module["postRun"] = [ Module["postRun"] ];
+    while (Module["postRun"].length) {
+      addOnPostRun(Module["postRun"].shift());
+    }
+  }
   callRuntimeCallbacks(__ATPOSTRUN__);
 }
 
@@ -652,6 +677,7 @@ function getUniqueRunDependency(id) {
 
 function addRunDependency(id) {
   runDependencies++;
+  Module["monitorRunDependencies"]?.(runDependencies);
   if (id) {
     assert(!runDependencyTracking[id]);
     runDependencyTracking[id] = 1;
@@ -683,6 +709,7 @@ function addRunDependency(id) {
 
 function removeRunDependency(id) {
   runDependencies--;
+  Module["monitorRunDependencies"]?.(runDependencies);
   if (id) {
     assert(runDependencyTracking[id]);
     delete runDependencyTracking[id];
@@ -703,6 +730,7 @@ function removeRunDependency(id) {
 }
 
 /** @param {string|number=} what */ function abort(what) {
+  Module["onAbort"]?.(what);
   what = "Aborted(" + what + ")";
   // TODO(sbc): Should we remove printing and leave it up to whoever
   // catches the exception?
@@ -862,6 +890,20 @@ function createWasm() {
     assert(Module === trueModule, "the Module object should not be replaced during async compilation - perhaps the order of HTML elements is wrong?");
     trueModule = null;
     receiveInstance(result["instance"], result["module"]);
+  }
+  // User shell pages can write their own Module.instantiateWasm = function(imports, successCallback) callback
+  // to manually instantiate the Wasm module themselves. This allows pages to
+  // run the instantiation parallel to any other async startup actions they are
+  // performing.
+  // Also pthreads and wasm workers initialize the wasm instance through this
+  // path.
+  if (Module["instantiateWasm"]) {
+    try {
+      return Module["instantiateWasm"](info, receiveInstance);
+    } catch (e) {
+      err(`Module.instantiateWasm callback failed with error: ${e}`);
+      return false;
+    }
   }
   if (!wasmBinaryFile) wasmBinaryFile = findWasmBinary();
   instantiateAsync(wasmBinary, wasmBinaryFile, info, receiveInstantiationResult);
@@ -1052,7 +1094,7 @@ var spawnThread = threadParams => {
 
 var runtimeKeepaliveCounter = 0;
 
-var keepRuntimeAlive = () => runtimeKeepaliveCounter > 0;
+var keepRuntimeAlive = () => noExitRuntime || runtimeKeepaliveCounter > 0;
 
 var stackSave = () => _emscripten_stack_get_current();
 
@@ -1103,6 +1145,7 @@ function _proc_exit(code) {
   EXITSTATUS = code;
   if (!keepRuntimeAlive()) {
     PThread.terminateAllThreads();
+    Module["onExit"]?.(code);
     ABORT = true;
   }
   quit_(code, new ExitStatus(code));
@@ -1194,11 +1237,6 @@ var PThread = {
     }
   },
   initMainThread() {
-    var pthreadPoolSize = 2;
-    // Start loading up the Worker pool, if requested.
-    while (pthreadPoolSize--) {
-      PThread.allocateUnusedWorker();
-    }
     // MINIMAL_RUNTIME takes care of calling loadWasmModuleToAllWorkers
     // in postamble_minimal.js
     addOnPreRun(() => {
@@ -1206,7 +1244,16 @@ var PThread = {
       PThread.loadWasmModuleToAllWorkers(() => removeRunDependency("loading-workers"));
     });
   },
-  initWorker() {},
+  initWorker() {
+    // The default behaviour for pthreads is always to exit once they return
+    // from their entry point (or call pthread_exit).  If we set noExitRuntime
+    // to true here on pthreads they would never complete and attempt to
+    // pthread_join to them would block forever.
+    // pthreads can still choose to set `noExitRuntime` explicitly, or
+    // call emscripten_unwind_to_js_event_loop to extend their lifetime beyond
+    // their main function.  See comment in src/runtime_pthread.js for more.
+    noExitRuntime = false;
+  },
   setExitStatus: status => EXITSTATUS = status,
   terminateAllThreads__deps: [ "$terminateWorker" ],
   terminateAllThreads: () => {
@@ -1310,7 +1357,7 @@ var PThread = {
     // When running on a pthread, none of the incoming parameters on the module
     // object are present. Proxy known handlers back to the main thread if specified.
     var handlers = [];
-    var knownHandlers = [ "print", "printErr" ];
+    var knownHandlers = [ "onExit", "onAbort", "print", "printErr" ];
     for (var handler of knownHandlers) {
       if (Module.propertyIsEnumerable(handler)) {
         handlers.push(handler);
@@ -1327,12 +1374,7 @@ var PThread = {
     });
   }),
   loadWasmModuleToAllWorkers(onMaybeReady) {
-    // Instantiation is synchronous in pthreads.
-    if (ENVIRONMENT_IS_PTHREAD) {
-      return onMaybeReady();
-    }
-    let pthreadPoolReady = Promise.all(PThread.unusedWorkers.map(PThread.loadWasmModuleToWorker));
-    pthreadPoolReady.then(onMaybeReady);
+    onMaybeReady();
   },
   allocateUnusedWorker() {
     var worker;
@@ -1342,6 +1384,14 @@ var PThread = {
       "name": "em-pthread"
     };
     var pthreadMainJs = _scriptName;
+    // We can't use makeModuleReceiveWithVar here since we want to also
+    // call URL.createObjectURL on the mainScriptUrlOrBlob.
+    if (Module["mainScriptUrlOrBlob"]) {
+      pthreadMainJs = Module["mainScriptUrlOrBlob"];
+      if (typeof pthreadMainJs != "string") {
+        pthreadMainJs = URL.createObjectURL(pthreadMainJs);
+      }
+    }
     worker = new Worker(pthreadMainJs, workerOptions);
     PThread.unusedWorkers.push(worker);
   },
@@ -1454,6 +1504,8 @@ var invokeEntryPoint = (ptr, arg) => {
   }
   finish(result);
 };
+
+var noExitRuntime = Module["noExitRuntime"] || true;
 
 var registerTLSInit = tlsInitFunc => PThread.tlsInitFunctions.push(tlsInitFunc);
 
@@ -2467,7 +2519,7 @@ var FS_createDataFile = (parent, name, fileData, canRead, canWrite, canOwn) => {
   FS.createDataFile(parent, name, fileData, canRead, canWrite, canOwn);
 };
 
-var preloadPlugins = [];
+var preloadPlugins = Module["preloadPlugins"] || [];
 
 var FS_handledByPreloadPlugin = (byteArray, fullname, finish, onerror) => {
   // Ensure plugins are ready.
@@ -5364,55 +5416,6 @@ FS.staticInit();
 var proxiedFunctionTable = [ _proc_exit, exitOnMainThread, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_fstat64, ___syscall_ioctl, ___syscall_lstat64, ___syscall_newfstatat, ___syscall_openat, ___syscall_rmdir, ___syscall_stat64, ___syscall_unlinkat, __mmap_js, __munmap_js, _emscripten_websocket_close, _emscripten_websocket_is_supported, _emscripten_websocket_new, _emscripten_websocket_send_utf8_text, _emscripten_websocket_set_onclose_callback_on_thread, _emscripten_websocket_set_onmessage_callback_on_thread, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write ];
 
 function checkIncomingModuleAPI() {
-  ignoredModuleProp("ENVIRONMENT");
-  ignoredModuleProp("GL_MAX_TEXTURE_IMAGE_UNITS");
-  ignoredModuleProp("SDL_canPlayWithWebAudio");
-  ignoredModuleProp("SDL_numSimultaneouslyQueuedBuffers");
-  ignoredModuleProp("INITIAL_MEMORY");
-  ignoredModuleProp("wasmMemory");
-  ignoredModuleProp("arguments");
-  ignoredModuleProp("buffer");
-  ignoredModuleProp("canvas");
-  ignoredModuleProp("doNotCaptureKeyboard");
-  ignoredModuleProp("dynamicLibraries");
-  ignoredModuleProp("elementPointerLock");
-  ignoredModuleProp("extraStackTrace");
-  ignoredModuleProp("forcedAspectRatio");
-  ignoredModuleProp("instantiateWasm");
-  ignoredModuleProp("keyboardListeningElement");
-  ignoredModuleProp("freePreloadedMediaOnUse");
-  ignoredModuleProp("loadSplitModule");
-  ignoredModuleProp("locateFile");
-  ignoredModuleProp("logReadFiles");
-  ignoredModuleProp("mainScriptUrlOrBlob");
-  ignoredModuleProp("mem");
-  ignoredModuleProp("monitorRunDependencies");
-  ignoredModuleProp("noExitRuntime");
-  ignoredModuleProp("noInitialRun");
-  ignoredModuleProp("onAbort");
-  ignoredModuleProp("onCustomMessage");
-  ignoredModuleProp("onExit");
-  ignoredModuleProp("onFree");
-  ignoredModuleProp("onFullScreen");
-  ignoredModuleProp("onMalloc");
-  ignoredModuleProp("onRealloc");
-  ignoredModuleProp("postMainLoop");
-  ignoredModuleProp("postRun");
-  ignoredModuleProp("preInit");
-  ignoredModuleProp("preMainLoop");
-  ignoredModuleProp("preRun");
-  ignoredModuleProp("preinitializedWebGLContext");
-  ignoredModuleProp("preloadPlugins");
-  ignoredModuleProp("quit");
-  ignoredModuleProp("setStatus");
-  ignoredModuleProp("statusMessage");
-  ignoredModuleProp("stderr");
-  ignoredModuleProp("stdin");
-  ignoredModuleProp("stdout");
-  ignoredModuleProp("thisProgram");
-  ignoredModuleProp("wasm");
-  ignoredModuleProp("wasmBinary");
-  ignoredModuleProp("websocket");
   ignoredModuleProp("fetchSettings");
 }
 
@@ -5545,6 +5548,8 @@ var dynCall_iiiiiijj = Module["dynCall_iiiiiijj"] = createExportWrapper("dynCall
 
 // include: postamble.js
 // === Auto-generated postamble setup entry stuff ===
+Module["wasmMemory"] = wasmMemory;
+
 Module["ccall"] = ccall;
 
 Module["cwrap"] = cwrap;
@@ -5553,7 +5558,7 @@ var missingLibrarySymbols = [ "writeI53ToI64", "writeI53ToI64Clamped", "writeI53
 
 missingLibrarySymbols.forEach(missingLibrarySymbol);
 
-var unexportedSymbols = [ "run", "addOnPreRun", "addOnInit", "addOnPreMain", "addOnExit", "addOnPostRun", "addRunDependency", "removeRunDependency", "out", "err", "callMain", "abort", "wasmMemory", "wasmExports", "GROWABLE_HEAP_I8", "GROWABLE_HEAP_U8", "GROWABLE_HEAP_I16", "GROWABLE_HEAP_U16", "GROWABLE_HEAP_I32", "GROWABLE_HEAP_U32", "GROWABLE_HEAP_F32", "GROWABLE_HEAP_F64", "writeStackCookie", "checkStackCookie", "convertI32PairToI53Checked", "stackSave", "stackRestore", "stackAlloc", "ptrToString", "zeroMemory", "exitJS", "getHeapMax", "growMemory", "ENV", "MONTH_DAYS_REGULAR", "MONTH_DAYS_LEAP", "MONTH_DAYS_REGULAR_CUMULATIVE", "MONTH_DAYS_LEAP_CUMULATIVE", "isLeapYear", "ydayFromDate", "ERRNO_CODES", "strError", "DNS", "Protocols", "Sockets", "initRandomFill", "randomFill", "timers", "warnOnce", "readEmAsmArgsArray", "jstoi_s", "getExecutableName", "handleException", "keepRuntimeAlive", "runtimeKeepalivePush", "runtimeKeepalivePop", "callUserCallback", "maybeExit", "asyncLoad", "alignMemory", "mmapAlloc", "HandleAllocator", "wasmTable", "noExitRuntime", "getCFunc", "freeTableIndexes", "functionsInTableMap", "setValue", "getValue", "PATH", "PATH_FS", "UTF8Decoder", "UTF8ArrayToString", "UTF8ToString", "stringToUTF8Array", "stringToUTF8", "lengthBytesUTF8", "intArrayFromString", "stringToAscii", "UTF16Decoder", "stringToNewUTF8", "stringToUTF8OnStack", "writeArrayToMemory", "JSEvents", "specialHTMLTargets", "findCanvasEventTarget", "currentFullscreenStrategy", "restoreOldWindowedStyle", "UNWIND_CACHE", "ExitStatus", "getEnvStrings", "doReadv", "doWritev", "promiseMap", "uncaughtExceptionCount", "exceptionLast", "exceptionCaught", "ExceptionInfo", "Browser", "getPreloadedImageData__data", "wget", "SYSCALLS", "preloadPlugins", "FS_createPreloadedFile", "FS_modeStringToFlags", "FS_getMode", "FS_stdin_getChar_buffer", "FS_stdin_getChar", "FS_createPath", "FS_createDevice", "FS_readFile", "FS", "FS_createDataFile", "FS_createLazyFile", "MEMFS", "TTY", "PIPEFS", "SOCKFS", "tempFixedLengthArray", "miniTempWebGLFloatBuffers", "miniTempWebGLIntBuffers", "GL", "AL", "GLUT", "EGL", "GLEW", "IDBStore", "SDL", "SDL_gfx", "allocateUTF8", "allocateUTF8OnStack", "print", "printErr", "PThread", "terminateWorker", "killThread", "cleanupThread", "registerTLSInit", "cancelThread", "spawnThread", "exitOnMainThread", "proxyToMainThread", "proxiedJSCallArgs", "invokeEntryPoint", "checkMailbox", "webSockets", "WS" ];
+var unexportedSymbols = [ "run", "addOnPreRun", "addOnInit", "addOnPreMain", "addOnExit", "addOnPostRun", "addRunDependency", "removeRunDependency", "out", "err", "callMain", "abort", "wasmExports", "GROWABLE_HEAP_I8", "GROWABLE_HEAP_U8", "GROWABLE_HEAP_I16", "GROWABLE_HEAP_U16", "GROWABLE_HEAP_I32", "GROWABLE_HEAP_U32", "GROWABLE_HEAP_F32", "GROWABLE_HEAP_F64", "writeStackCookie", "checkStackCookie", "convertI32PairToI53Checked", "stackSave", "stackRestore", "stackAlloc", "ptrToString", "zeroMemory", "exitJS", "getHeapMax", "growMemory", "ENV", "MONTH_DAYS_REGULAR", "MONTH_DAYS_LEAP", "MONTH_DAYS_REGULAR_CUMULATIVE", "MONTH_DAYS_LEAP_CUMULATIVE", "isLeapYear", "ydayFromDate", "ERRNO_CODES", "strError", "DNS", "Protocols", "Sockets", "initRandomFill", "randomFill", "timers", "warnOnce", "readEmAsmArgsArray", "jstoi_s", "getExecutableName", "handleException", "keepRuntimeAlive", "runtimeKeepalivePush", "runtimeKeepalivePop", "callUserCallback", "maybeExit", "asyncLoad", "alignMemory", "mmapAlloc", "HandleAllocator", "wasmTable", "noExitRuntime", "getCFunc", "freeTableIndexes", "functionsInTableMap", "setValue", "getValue", "PATH", "PATH_FS", "UTF8Decoder", "UTF8ArrayToString", "UTF8ToString", "stringToUTF8Array", "stringToUTF8", "lengthBytesUTF8", "intArrayFromString", "stringToAscii", "UTF16Decoder", "stringToNewUTF8", "stringToUTF8OnStack", "writeArrayToMemory", "JSEvents", "specialHTMLTargets", "findCanvasEventTarget", "currentFullscreenStrategy", "restoreOldWindowedStyle", "UNWIND_CACHE", "ExitStatus", "getEnvStrings", "doReadv", "doWritev", "promiseMap", "uncaughtExceptionCount", "exceptionLast", "exceptionCaught", "ExceptionInfo", "Browser", "getPreloadedImageData__data", "wget", "SYSCALLS", "preloadPlugins", "FS_createPreloadedFile", "FS_modeStringToFlags", "FS_getMode", "FS_stdin_getChar_buffer", "FS_stdin_getChar", "FS_createPath", "FS_createDevice", "FS_readFile", "FS", "FS_createDataFile", "FS_createLazyFile", "MEMFS", "TTY", "PIPEFS", "SOCKFS", "tempFixedLengthArray", "miniTempWebGLFloatBuffers", "miniTempWebGLIntBuffers", "GL", "AL", "GLUT", "EGL", "GLEW", "IDBStore", "SDL", "SDL_gfx", "allocateUTF8", "allocateUTF8OnStack", "print", "printErr", "PThread", "terminateWorker", "killThread", "cleanupThread", "registerTLSInit", "cancelThread", "spawnThread", "exitOnMainThread", "proxyToMainThread", "proxiedJSCallArgs", "invokeEntryPoint", "checkMailbox", "webSockets", "WS" ];
 
 unexportedSymbols.forEach(unexportedRuntimeSymbol);
 
@@ -5631,7 +5636,15 @@ function run(args = arguments_) {
     if (shouldRunNow) callMain(args);
     postRun();
   }
-  {
+  if (Module["setStatus"]) {
+    Module["setStatus"]("Running...");
+    setTimeout(function() {
+      setTimeout(function() {
+        Module["setStatus"]("");
+      }, 1);
+      doRun();
+    }, 1);
+  } else {
     doRun();
   }
   checkStackCookie();
@@ -5677,7 +5690,16 @@ function checkUnflushedContent() {
   }
 }
 
+if (Module["preInit"]) {
+  if (typeof Module["preInit"] == "function") Module["preInit"] = [ Module["preInit"] ];
+  while (Module["preInit"].length > 0) {
+    Module["preInit"].pop()();
+  }
+}
+
 // shouldRunNow refers to calling main(), not run().
 var shouldRunNow = true;
+
+if (Module["noInitialRun"]) shouldRunNow = false;
 
 run();
