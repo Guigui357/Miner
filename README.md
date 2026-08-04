@@ -1,3 +1,3 @@
 # Miner
 Mine monero with html (not efficient?)
-Uses cn-lite/pico as an algorithm
+Uses REAL RANDOMX IS AN ALGO
