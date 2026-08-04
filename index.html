@@ -2,65 +2,196 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Wasm Monero Miner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monero WASM Miner</title>
     <style>
-        body { font-family: sans-serif; background: #1e1e1e; color: #fff; padding: 20px; }
-        .console { background: #000; padding: 15px; border-radius: 5px; font-family: monospace; height: 300px; overflow-y: scroll; border: 1px solid #333; }
-        button { padding: 10px 20px; font-size: 16px; background: #ff6600; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:disabled { background: #555; }
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --accent-color: #ff6600;
+            --text-color: #e0e0e0;
+            --console-bg: #000000;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            color: var(--accent-color);
+            margin-top: 0;
+            font-size: 24px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+
+        .control-panel {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #e05500;
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #444;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        .console-label {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        .console {
+            background-color: var(--console-bg);
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 15px;
+            height: 350px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            box-sizing: border-box;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .log-wasm { color: #00ff00; }
+        .log-error { color: #ff3333; }
+        .log-info { color: #00bfff; }
     </style>
 </head>
 <body>
 
-    <h1>Monero Web Miner (WASM + Threads)</h1>
-    <button id="startBtn">Iniciar Mineração</button>
-    
-    <h3>Log do Minerador:</h3>
-    <div class="console" id="logConsole">Aguardando comando...</div>
+    <div class="container">
+        <h1>Monero Web Miner (WASM + Threads)</h1>
+        
+        <div class="control-panel">
+            <button id="startBtn" disabled>Iniciar Mineração</button>
+        </div>
 
-    <!-- Importa o arquivo JS gerado pelo Emscripten -->
-    <script src="bin/miner.js"></script>
+        <div class="console-label">Terminal de Saída:</div>
+        <div class="console" id="logConsole">
+            <div class="log-entry log-info">[SISTEMA] Aguardando inicialização do ambiente WebAssembly...</div>
+        </div>
+    </div>
 
+    <!-- 1. Configuração prévia da API de comunicação com o Emscripten -->
     <script>
         const logConsole = document.getElementById('logConsole');
-        const startBtn = document.getElementById('startBtn');
 
-        // Redireciona os prints do C++ (std::cout / Utils::threadSafePrint) direto para a tela do navegador
+        function appendToConsole(text, type = 'wasm') {
+            if (!logConsole) return;
+            const entry = document.createElement('div');
+            entry.classList.add('log-entry', `log-${type}`);
+            entry.textContent = text;
+            logConsole.appendChild(entry);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Objeto global de configuração que o script do Emscripten lerá ao inicializar
         window.Module = {
             print: function(text) {
                 console.log(text);
-                logConsole.innerHTML += `<div>[WASM] ${text}</div>`;
-                logConsole.scrollTop = logConsole.scrollHeight;
+                appendToConsole(text, 'wasm');
             },
             printErr: function(text) {
                 console.error(text);
-                logConsole.innerHTML += `<div style="color: #ff3333;">[ERRO] ${text}</div>`;
-                logConsole.scrollTop = logConsole.scrollHeight;
+                // Filtra avisos não críticos para não poluir a tela
+                if (!text.includes("missing function") && !text.includes("deprecated")) {
+                    appendToConsole(text, 'error');
+                }
             },
             onRuntimeInitialized: function() {
-                window.Module.print("Módulo WebAssembly carregado com sucesso!");
-                startBtn.disabled = false;
+                appendToConsole("[SISTEMA] Módulo WebAssembly e ambiente Worker prontos!", 'info');
+                document.getElementById('startBtn').disabled = false;
             }
         };
+    </script>
 
-        startBtn.addEventListener('click', () => {
+    <!-- 2. Importação do carregador JavaScript gerado no build -->
+    <script src="bin/miner.js"></script>
+
+    <!-- 3. Interceptação de ações e pontes de execução -->
+    <script>
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const startBtn = document.getElementById('startBtn');
             startBtn.disabled = true;
-            window.Module.print("Iniciando minerador...");
+            
+            appendToConsole("[SISTEMA] Disparando comando de inicialização na thread C++...", 'info');
 
             try {
-                // Vincula a função exportada do C++ para o JavaScript
-                const startMining = window.Module.cwrap('startMining', 'boolean', []);
-                
-                // Executa a mineração!
-                const success = startMining();
-                
-                if (success) {
-                    window.Module.print("🚀 startMining() executado e rodando em segundo plano!");
-                } else {
-                    window.Module.print("❌ Falha interna ao executar startMining().");
+                let success = false;
+
+                // Teste de Caminho 1: Invocação direta pelo anexo de escopo do Module
+                if (typeof Module._startMining === "function") {
+                    success = Module._startMining();
+                } 
+                // Teste de Caminho 2: Chamada utilizando a API de encapsulamento síncrono (ccall)
+                else if (typeof Module.ccall === "function") {
+                    success = Module.ccall('startMining', 'boolean', [], []);
+                } 
+                // Teste de Caminho 3: Fallback global dinâmico do Emscripten
+                else if (typeof ccall === "function") {
+                    success = ccall('startMining', 'boolean', [], []);
+                } 
+                else {
+                    throw new Error("As APIs de exportação do Emscripten (ccall/_startMining) não estão acessíveis nesta janela principal.");
                 }
+
+                if (success) {
+                    appendToConsole("[SISTEMA] 🚀 Motor startMining() executado com sucesso nas threads trabalhadoras!", 'info');
+                } else {
+                    appendToConsole("[SISTEMA] ❌ O startMining() retornou falso internamente no C++.", 'error');
+                    startBtn.disabled = false; // Permite tentar novamente caso falhe
+                }
+
             } catch (err) {
-                window.Module.printErr("Erro ao chamar a função WASM: " + err.message);
+                appendToConsole("Falha crítica de execução: " + err.message, 'error');
+                console.error(err);
+                startBtn.disabled = false;
             }
         });
     </script>
