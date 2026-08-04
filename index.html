@@ -4,6 +4,13 @@
     <title>Monero WASM Miner</title>
     <!-- ADICIONE ESSA LINHA AQUI NO TOPO: -->
     <script src="coi-serviceworker.js"></script>
+    <script>
+        // Força a página a parar aqui se o COI ainda estiver registrando o Service Worker
+        if (window.crossOriginIsolated === false) {
+            console.log("[SISTEMA] Aguardando o COI Service Worker isolar a página...");
+        }
+    </script>
+
     <style>
         :root {
             --bg-color: #121212;
@@ -159,6 +166,7 @@
     </div>
 
     <script>
+        // 2. Só inicializa o Module se a página já estiver em ambiente isolado e seguro
         const logConsole = document.getElementById('logConsole');
 
         function appendToConsole(text, type = 'wasm') {
