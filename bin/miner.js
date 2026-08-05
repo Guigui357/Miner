@@ -5164,6 +5164,22 @@ function _emscripten_websocket_set_onmessage_callback_on_thread(socketId, userDa
   return 0;
 }
 
+function _emscripten_websocket_set_onopen_callback_on_thread(socketId, userData, callbackFunc, thread) {
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(20, 0, 1, socketId, userData, callbackFunc, thread);
+  // TODO:
+  //    if (thread == 2 ||
+  //      (thread == _pthread_self()) return emscripten_websocket_set_onopen_callback_on_calling_thread(socketId, userData, callbackFunc);
+  var eventPtr = WS.getSocketEvent(socketId);
+  var socket = WS.getSocket(socketId);
+  if (!socket) {
+    return -3;
+  }
+  socket.onopen = function(e) {
+    getWasmTableEntry(callbackFunc)(0, /*TODO*/ eventPtr, userData);
+  };
+  return 0;
+}
+
 var ENV = {};
 
 var getExecutableName = () => thisProgram || "./this.program";
@@ -5208,7 +5224,7 @@ var stringToAscii = (str, buffer) => {
 };
 
 var _environ_get = function(__environ, environ_buf) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(20, 0, 1, __environ, environ_buf);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(21, 0, 1, __environ, environ_buf);
   var bufSize = 0;
   getEnvStrings().forEach((string, i) => {
     var ptr = environ_buf + bufSize;
@@ -5220,7 +5236,7 @@ var _environ_get = function(__environ, environ_buf) {
 };
 
 var _environ_sizes_get = function(penviron_count, penviron_buf_size) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(21, 0, 1, penviron_count, penviron_buf_size);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(22, 0, 1, penviron_count, penviron_buf_size);
   var strings = getEnvStrings();
   GROWABLE_HEAP_U32()[((penviron_count) >> 2)] = strings.length;
   var bufSize = 0;
@@ -5230,7 +5246,7 @@ var _environ_sizes_get = function(penviron_count, penviron_buf_size) {
 };
 
 function _fd_close(fd) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(22, 0, 1, fd);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(23, 0, 1, fd);
   try {
     var stream = SYSCALLS.getStreamFromFD(fd);
     FS.close(stream);
@@ -5260,7 +5276,7 @@ function _fd_close(fd) {
 };
 
 function _fd_read(fd, iov, iovcnt, pnum) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(23, 0, 1, fd, iov, iovcnt, pnum);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(24, 0, 1, fd, iov, iovcnt, pnum);
   try {
     var stream = SYSCALLS.getStreamFromFD(fd);
     var num = doReadv(stream, iov, iovcnt);
@@ -5273,7 +5289,7 @@ function _fd_read(fd, iov, iovcnt, pnum) {
 }
 
 function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(24, 0, 1, fd, offset_low, offset_high, whence, newOffset);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(25, 0, 1, fd, offset_low, offset_high, whence, newOffset);
   var offset = convertI32PairToI53Checked(offset_low, offset_high);
   try {
     if (isNaN(offset)) return 61;
@@ -5307,7 +5323,7 @@ function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
 };
 
 function _fd_write(fd, iov, iovcnt, pnum) {
-  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(25, 0, 1, fd, iov, iovcnt, pnum);
+  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(26, 0, 1, fd, iov, iovcnt, pnum);
   try {
     var stream = SYSCALLS.getStreamFromFD(fd);
     var num = doWritev(stream, iov, iovcnt);
@@ -5408,7 +5424,7 @@ FS.staticInit();
 // either synchronously or asynchronously from other threads in postMessage()d
 // or internally queued events. This way a pthread in a Worker can synchronously
 // access e.g. the DOM on the main thread.
-var proxiedFunctionTable = [ _proc_exit, exitOnMainThread, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_fstat64, ___syscall_ioctl, ___syscall_lstat64, ___syscall_newfstatat, ___syscall_openat, ___syscall_rmdir, ___syscall_stat64, ___syscall_unlinkat, __mmap_js, __munmap_js, _emscripten_websocket_close, _emscripten_websocket_is_supported, _emscripten_websocket_new, _emscripten_websocket_send_utf8_text, _emscripten_websocket_set_onclose_callback_on_thread, _emscripten_websocket_set_onmessage_callback_on_thread, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write ];
+var proxiedFunctionTable = [ _proc_exit, exitOnMainThread, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_fstat64, ___syscall_ioctl, ___syscall_lstat64, ___syscall_newfstatat, ___syscall_openat, ___syscall_rmdir, ___syscall_stat64, ___syscall_unlinkat, __mmap_js, __munmap_js, _emscripten_websocket_close, _emscripten_websocket_is_supported, _emscripten_websocket_new, _emscripten_websocket_send_utf8_text, _emscripten_websocket_set_onclose_callback_on_thread, _emscripten_websocket_set_onmessage_callback_on_thread, _emscripten_websocket_set_onopen_callback_on_thread, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write ];
 
 function checkIncomingModuleAPI() {
   ignoredModuleProp("fetchSettings");
@@ -5455,6 +5471,7 @@ function assignWasmImports() {
     /** @export */ emscripten_websocket_send_utf8_text: _emscripten_websocket_send_utf8_text,
     /** @export */ emscripten_websocket_set_onclose_callback_on_thread: _emscripten_websocket_set_onclose_callback_on_thread,
     /** @export */ emscripten_websocket_set_onmessage_callback_on_thread: _emscripten_websocket_set_onmessage_callback_on_thread,
+    /** @export */ emscripten_websocket_set_onopen_callback_on_thread: _emscripten_websocket_set_onopen_callback_on_thread,
     /** @export */ environ_get: _environ_get,
     /** @export */ environ_sizes_get: _environ_sizes_get,
     /** @export */ exit: _exit,
