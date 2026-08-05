@@ -102,6 +102,14 @@
             cursor: not-allowed;
         }
 
+        .stop-btn {
+            background-color: #cc0000;
+        }
+
+        .stop-btn:hover:not(:disabled) {
+            background-color: #aa0000;
+        }
+
         .console-label {
             font-size: 14px;
             font-weight: bold;
@@ -148,8 +156,10 @@
             <input type="text" id="workerInput" placeholder="Ex: web_worker_01" value="WasmMinerHtml">
         </div>
 
+        <!-- Painel de botões de controle dinâmicos -->
         <div class="control-panel">
             <button id="startBtn" disabled>Iniciar Mineração</button>
+            <button id="stopBtn" class="stop-btn" disabled>Parar Mineração</button>
         </div>
 
         <div class="console-label">Terminal de Saída:</div>
@@ -158,7 +168,7 @@
         </div>
     </div>
 
-    <!-- 1. Configuração de ganchos do MinerModule ANTES do script carregar -->
+    <!-- 1. Configuração de ganchos do Module do Emscripten ANTES de ler o miner.js -->
     <script>
         const logConsole = document.getElementById('logConsole');
 
@@ -171,36 +181,36 @@
             logConsole.scrollTop = logConsole.scrollHeight;
         }
 
-        // Casamento perfeito com o EXPORT_NAME="MinerModule" definido no seu Makefile
-        window.MinerModule = {
+        // Configuração padrão do Emscripten mapeada para capturar saídas textuais das threads
+        window.Module = {
             print: function(text) {
                 console.log(text);
                 appendToConsole(text, 'wasm');
             },
             printErr: function(text) {
                 console.error(text);
-                // Evita espalhar logs de warnings irrelevantes na interface
+                // Filtra mensagens poluentes ou depreciadas que não afetam a mineração
                 if (!text.includes("missing function") && !text.includes("deprecated")) {
                     appendToConsole(text, 'error');
                 }
             },
             onRuntimeInitialized: function() {
-                appendToConsole("[SISTEMA] Módulo WebAssembly e pool de threads inicializados com sucesso na Cloud Vercel!", 'info');
+                appendToConsole("[SISTEMA] Módulo WebAssembly pronto e subsistema de threads carregado com sucesso na Vercel!", 'info');
                 document.getElementById('startBtn').disabled = false;
             }
         };
-
-        // Redirecionamento de segurança para o Emscripten mapear as saídas locais
-        window.Module = window.MinerModule;
     </script>
 
-    <!-- 2. Leitura do orquestrador JavaScript nativo gerado pelo compilador -->
+    <!-- 2. Leitura do orquestrador JavaScript nativo do compilador -->
     <script src="bin/miner.js"></script>
 
-    <!-- 3. Controle e envio de parâmetros da carteira para o motor C++ -->
+    <!-- 3. Interceptação de cliques e envio seguro de strings via ccall -->
     <script>
-        document.getElementById('startBtn').addEventListener('click', () => {
-            const startBtn = document.getElementById('startBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        // BOTÃO: INICIAR MINERAÇÃO
+        startBtn.addEventListener('click', () => {
             const walletAddress = document.getElementById('walletInput').value.trim();
             const workerName = document.getElementById('workerInput').value.trim();
 
@@ -210,35 +220,62 @@
             }
 
             startBtn.disabled = true;
-            appendToConsole("[SISTEMA] Alocando memória e disparando 'startMining' via ccall...", 'info');
+            appendToConsole("[SISTEMA] Conectando ao Proxy e ativando loops de mineração via ccall...", 'info');
 
             try {
                 let success = false;
-                const targetModule = window.MinerModule || window.Module;
 
-                // Executa a injeção segura de strings via ccall do Emscripten
-                if (targetModule && typeof targetModule.ccall === "function") {
-                    success = targetModule.ccall(
-                        'startMining',       // Assinatura exposta via extern "C"
-                        'boolean',           // Tipo retornado pelo método
-                        ['string', 'string'],// Assinatura dos tipos dos argumentos
-                        [walletAddress, workerName] // Dados capturados dos inputs do formulário
+                // Executa a injeção segura de strings para a memória do WebAssembly
+                if (Module && typeof Module.ccall === "function") {
+                    success = Module.ccall(
+                        'startMining',       // Nome da função no extern "C" do MoneroMiner.cpp
+                        'boolean',           // Tipo retornado
+                        ['string', 'string'],// Tipos dos argumentos passados
+                        [walletAddress, workerName] // Dados dos formulários
                     );
                 } else {
-                    throw new Error("O subsistema de controle de memória das threads não está pronto.");
+                    throw new Error("A API de alocação de memória do motor principal não está acessível.");
                 }
 
                 if (success) {
-                    appendToConsole("[SISTEMA] 🚀 Sucesso! O loop do minerador foi ativado em background nas threads filhas.", 'info');
+                    appendToConsole("[SISTEMA] 🚀 Sucesso! O motor de mineração foi ativado em background.", 'info');
+                    stopBtn.disabled = false; // Libera o botão de Parar
                 } else {
-                    appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a chamada ou falhou internamente.", 'error');
+                    appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a inicialização ou retornou falso.", 'error');
                     startBtn.disabled = false;
                 }
 
             } catch (err) {
-                appendToConsole("Falha crítica de execução: " + err.message, 'error');
+                appendToConsole("Falha crítica ao iniciar: " + err.message, 'error');
                 console.error(err);
                 startBtn.disabled = false;
+            }
+        });
+
+        // BOTÃO: PARAR MINERAÇÃO
+        stopBtn.addEventListener('click', () => {
+            stopBtn.disabled = true;
+            appendToConsole("[SISTEMA] Solicitando parada das threads e limpeza de memória para o motor C++...", 'info');
+
+            try {
+                let success = false;
+
+                if (Module && typeof Module.ccall === "function") {
+                    success = Module.ccall('stopMining', 'boolean', [], []);
+                }
+
+                if (success) {
+                    appendToConsole("[SISTEMA] 🛑 Minerador parado com sucesso! O loop foi desmontado.", 'info');
+                    startBtn.disabled = false; // Permite iniciar uma nova rodada com outra carteira se quiser
+                } else {
+                    appendToConsole("[SISTEMA] ❌ O stopMining() retornou falso internamente.", 'error');
+                    stopBtn.disabled = false;
+                }
+
+            } catch (err) {
+                appendToConsole("Falha crítica ao parar: " + err.message, 'error');
+                console.error(err);
+                stopBtn.disabled = false;
             }
         });
     </script>
