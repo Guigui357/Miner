@@ -165,8 +165,7 @@
             <div class="log-entry log-info">[SISTEMA] Inicializando ambiente e carregando runtime do WebAssembly...</div>
         </div>
     </div>
-
-    <!-- 1. GANCHOS DE LOG DO EMSCRIPTEN (Apenas para capturar a saída textual se necessário) -->
+    <!-- 1. GANCHOS DE LOG DO EMSCRIPTEN -->
     <script>
         const logConsole = document.getElementById('logConsole');
 
@@ -180,9 +179,13 @@
         }
     </script>
 
-    <!-- 2. CRIAÇÃO DINÂMICA DO WEB WORKER (TUDO DENTRO DO INDEX.HTML) -->
+    <!-- 2. CRIAÇÃO DINÂMICA DO WEB WORKER (CORREÇÃO DE PADRÃO DE URL) -->
     <script>
-        // Criamos o código do worker como uma string inline
+        // Captura a URL base real de onde o seu site está rodando (Vercel, Localhost, etc.)
+        const baseServerUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+        const absoluteScriptPath = baseServerUrl + 'bin/miner.js';
+
+        // Montamos o código do worker injetando a URL resolvida de forma absoluta
         const workerCode = `
             self.console = {
                 log: function(msg) { self.postMessage({ type: 'log', text: msg }); },
@@ -201,8 +204,12 @@
                 }
             };
 
-            // ATENÇÃO: Carrega o binário gerado pelo Emscripten a partir da raiz do servidor
-            importScripts('bin/miner.js');
+            try {
+                // CORREÇÃO: Agora o Worker sabe o caminho HTTP exato para ler o binário
+                importScripts('${absoluteScriptPath}');
+            } catch (err) {
+                self.postMessage({ type: 'error', text: 'Falha ao carregar importScripts: ' + err.message });
+            }
 
             self.onmessage = function(e) {
                 const { command, walletAddress, workerName } = e.data;
@@ -211,7 +218,6 @@
                     try {
                         const emscriptenCcall = self.Module.ccall || (Module && Module.ccall);
                         if (typeof emscriptenCcall === "function") {
-                            // O ccall roda aqui de forma síncrona/bloqueante sem travar a UI do HTML principal!
                             const success = emscriptenCcall(
                                 'startMining',
                                 'boolean',
@@ -237,7 +243,7 @@
             };
         `;
 
-        // Transforma a string em um arquivo virtual (Blob) e gera uma URL para instanciar o Worker
+        // Instanciação segura usando a string convertida em Blob de dados
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const workerUrl = URL.createObjectURL(blob);
         
