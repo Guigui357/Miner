@@ -205,12 +205,16 @@
             };
 
             try {
-                // CORREÇÃO: Agora o Worker sabe o caminho HTTP exato para ler o binário
                 importScripts('${absoluteScriptPath}');
+                
+                // FALLBACK DE SEGURANÇA: Se o runtime já inicializou imediatamente 
+                // ou se o ponteiro existir, força o sinal de pronto para o HTML
+                if (self.Module.runtimeInitialized || (typeof Module !== 'undefined' && Module.runtimeInitialized)) {
+                    self.postMessage({ type: 'status', text: 'ready' });
+                }
             } catch (err) {
                 self.postMessage({ type: 'error', text: 'Falha ao carregar importScripts: ' + err.message });
             }
-
             self.onmessage = function(e) {
                 const { command, walletAddress, workerName } = e.data;
 
