@@ -184,8 +184,9 @@
         // Captura a URL base real de onde o seu site está rodando (Vercel, Localhost, etc.)
         const baseServerUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
         const absoluteScriptPath = baseServerUrl + 'bin/miner.js';
+        const absoluteWasmPath = baseServerUrl + 'bin/miner.wasm'; // Caminho absoluto para o .wasm
 
-        // Montamos o código do worker injetando a URL resolvida de forma absoluta
+        // Montamos o código do worker injetando as rotas absolutas resolvidas
         const workerCode = `
             self.console = {
                 log: function(msg) { self.postMessage({ type: 'log', text: msg }); },
@@ -199,6 +200,14 @@
                         self.postMessage({ type: 'error', text: text }); 
                     }
                 },
+                // CORREÇÃO CRÍTICA: Diz ao Emscripten exatamente onde o miner.wasm está hospedado.
+                // Isso impede o congelamento do resolvedor "wasm-instantiate".
+                locateFile: function(path, scriptDirectory) {
+                    if (path.endsWith('.wasm')) {
+                        return '${absoluteWasmPath}';
+                    }
+                    return scriptDirectory + path;
+                },
                 onRuntimeInitialized: function() {
                     self.postMessage({ type: 'status', text: 'ready' });
                 }
@@ -207,14 +216,14 @@
             try {
                 importScripts('${absoluteScriptPath}');
                 
-                // FALLBACK DE SEGURANÇA: Se o runtime já inicializou imediatamente 
-                // ou se o ponteiro existir, força o sinal de pronto para o HTML
+                // Fallback dinâmico: se o compilador já carregou os hooks, libera o botão imediatamente
                 if (self.Module.runtimeInitialized || (typeof Module !== 'undefined' && Module.runtimeInitialized)) {
                     self.postMessage({ type: 'status', text: 'ready' });
                 }
             } catch (err) {
                 self.postMessage({ type: 'error', text: 'Falha ao carregar importScripts: ' + err.message });
             }
+
             self.onmessage = function(e) {
                 const { command, walletAddress, workerName } = e.data;
 
@@ -230,7 +239,7 @@
                             );
                             self.postMessage({ type: 'status', text: success ? 'running' : 'failed' });
                         } else {
-                            throw new Error("O método ccall não foi exportado pelo runtime do Emscripten.");
+                            throw new Error("O método ccall não foi exportado pelo runtime.");
                         }
                     } catch (err) {
                         self.postMessage({ type: 'error', text: 'Falha no ccall do Worker: ' + err.message });
