@@ -166,7 +166,7 @@
         </div>
     </div>
 
-    <!-- 1. CONFIGURAÇÃO DE GANCHOS DO MODULE -->
+    <!-- 1. GANCHOS DE LOG DO EMSCRIPTEN (Apenas para capturar a saída textual se necessário) -->
     <script>
         const logConsole = document.getElementById('logConsole');
 
@@ -178,33 +178,106 @@
             logConsole.appendChild(entry);
             logConsole.scrollTop = logConsole.scrollHeight;
         }
-
-        window.Module = {
-            print: function(text) {
-                console.log(text);
-                appendToConsole(text, 'wasm');
-            },
-            printErr: function(text) {
-                console.error(text);
-                if (!text.includes("missing function") && !text.includes("deprecated")) {
-                    appendToConsole(text, 'error');
-                }
-            },
-            onRuntimeInitialized: function() {
-                appendToConsole("[SISTEMA] Módulo WebAssembly pronto e subsistema de threads carregado com sucesso!", 'info');
-                document.getElementById('startBtn').disabled = false;
-            }
-        };
     </script>
 
-    <!-- 2. INCLUSÃO DO ORQUESTRADOR EMSCRIPTEN -->
-    <script src="bin/miner.js"></script>
-
-    <!-- 3. INTERCEPTAÇÃO ASSÍNCRONA DE EVENTOS (CORREÇÃO DO DEADLOCK) -->
+    <!-- 2. CRIAÇÃO DINÂMICA DO WEB WORKER (TUDO DENTRO DO INDEX.HTML) -->
     <script>
+        // Criamos o código do worker como uma string inline
+        const workerCode = `
+            self.console = {
+                log: function(msg) { self.postMessage({ type: 'log', text: msg }); },
+                error: function(msg) { self.postMessage({ type: 'error', text: msg }); }
+            };
+
+            self.Module = {
+                print: function(text) { self.postMessage({ type: 'wasm', text: text }); },
+                printErr: function(text) { 
+                    if (!text.includes("missing function") && !text.includes("deprecated")) {
+                        self.postMessage({ type: 'error', text: text }); 
+                    }
+                },
+                onRuntimeInitialized: function() {
+                    self.postMessage({ type: 'status', text: 'ready' });
+                }
+            };
+
+            // ATENÇÃO: Carrega o binário gerado pelo Emscripten a partir da raiz do servidor
+            importScripts('bin/miner.js');
+
+            self.onmessage = function(e) {
+                const { command, walletAddress, workerName } = e.data;
+
+                if (command === 'start') {
+                    try {
+                        const emscriptenCcall = self.Module.ccall || (Module && Module.ccall);
+                        if (typeof emscriptenCcall === "function") {
+                            // O ccall roda aqui de forma síncrona/bloqueante sem travar a UI do HTML principal!
+                            const success = emscriptenCcall(
+                                'startMining',
+                                'boolean',
+                                ['string', 'string'],
+                                [walletAddress, workerName]
+                            );
+                            self.postMessage({ type: 'status', text: success ? 'running' : 'failed' });
+                        } else {
+                            throw new Error("O método ccall não foi exportado pelo runtime do Emscripten.");
+                        }
+                    } catch (err) {
+                        self.postMessage({ type: 'error', text: 'Falha no ccall do Worker: ' + err.message });
+                    }
+                }
+
+                if (command === 'stop') {
+                    const emscriptenCcall = self.Module.ccall || (Module && Module.ccall);
+                    if (typeof emscriptenCcall === "function") {
+                        emscriptenCcall('stopMining', 'void', [], []);
+                        self.postMessage({ type: 'status', text: 'stopped' });
+                    }
+                }
+            };
+        `;
+
+        // Transforma a string em um arquivo virtual (Blob) e gera uma URL para instanciar o Worker
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        
+        appendToConsole("[SISTEMA] Instanciando Web Worker inline isolado...", 'info');
+        const minerWorker = new Worker(workerUrl);
+
+        // =====================================================================
+        // CONTROLE DA INTERFACE DO USUÁRIO (UI) VIA MENSAGENS DO WORKER
+        // =====================================================================
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
 
+        minerWorker.onmessage = function(e) {
+            const { type, text } = e.data;
+
+            if (type === 'log') console.log(text);
+            if (type === 'wasm') appendToConsole(text, 'wasm');
+            if (type === 'error') appendToConsole(text, 'error');
+            
+            if (type === 'status') {
+                if (text === 'ready') {
+                    appendToConsole("[SISTEMA] Módulo carregado no Worker Inline. Pronto para minerar!", 'info');
+                    startBtn.disabled = false;
+                }
+                if (text === 'running') {
+                    appendToConsole("[SISTEMA] 🚀 Sucesso! O motor de mineração foi ativado na thread secundária.", 'info');
+                    stopBtn.disabled = false;
+                }
+                if (text === 'failed') {
+                    appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a inicialização.", 'error');
+                    startBtn.disabled = false;
+                }
+                if (text === 'stopped') {
+                    appendToConsole("[SISTEMA] 🛑 Mineração encerrada com sucesso.", 'info');
+                    startBtn.disabled = false;
+                }
+            }
+        };
+
+        // EVENTO: BOTÃO INICIAR
         startBtn.addEventListener('click', () => {
             const walletAddress = document.getElementById('walletInput').value.trim();
             const workerName = document.getElementById('workerInput').value.trim();
@@ -215,56 +288,20 @@
             }
 
             startBtn.disabled = true;
-            appendToConsole("[SISTEMA] Descolando thread... Ativando loops via ccall assíncrono.", 'info');
-
-            // CORREÇÃO: Encapsula em um setTimeout para liberar a Thread de UI do navegador imediatamente
-            setTimeout(() => {
-                try {
-                    let success = false;
-
-                    if (Module && typeof Module.ccall === "function") {
-                        // Invoca a função C++ sem prender o laço principal de eventos do WebSocket
-                        success = Module.ccall(
-                            'startMining',       
-                            'boolean',           
-                            ['string', 'string'],
-                            [walletAddress, workerName] 
-                        );
-                    } else {
-                        throw new Error("A API de alocação de memória do motor principal não está acessível.");
-                    }
-
-                    if (success) {
-                        appendToConsole("[SISTEMA] 🚀 Sucesso! O motor de mineração foi ativado em background.", 'info');
-                        stopBtn.disabled = false;
-                    } else {
-                        appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a inicialização ou retornou falso.", 'error');
-                        startBtn.disabled = false;
-                    }
-                } catch (err) {
-                    appendToConsole("[ERRO CRÍTICO] Falha na execução do motor: " + err.message, "error");
-                    startBtn.disabled = false;
-                }
-            }, 50); // Delay mínimo de 50ms para desempilhar a execução
+            appendToConsole("[SISTEMA] Disparando comando assíncrono para o Worker Inline...", 'info');
+            
+            minerWorker.postMessage({
+                command: 'start',
+                walletAddress: walletAddress,
+                workerName: workerName
+            });
         });
 
-        // BOTÃO: PARAR MINERAÇÃO
+        // EVENTO: BOTÃO PARAR
         stopBtn.addEventListener('click', () => {
             stopBtn.disabled = true;
-            appendToConsole("[SISTEMA] Enviando sinal de encerramento para as threads...", 'info');
-
-            setTimeout(() => {
-                try {
-                    if (Module && typeof Module.ccall === "function") {
-                        Module.ccall('stopMining', 'void', [], []);
-                        appendToConsole("[SISTEMA] 🛑 Mineração encerrada com sucesso.", 'info');
-                        startBtn.disabled = false;
-                    }
-                } catch (err) {
-                    appendToConsole("[ERRO] Falha ao parar: " + err.message, "error");
-                    stopBtn.disabled = false;
-                }
-            }, 50);
+            appendToConsole("[SISTEMA] Solicitando parada das threads...", 'info');
+            minerWorker.postMessage({ command: 'stop' });
         });
     </script>
 </body>
