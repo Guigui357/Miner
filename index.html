@@ -1,249 +1,76 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monero WASM Miner</title>
-    <style>
-        :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
-            --accent-color: #ff6600;
-            --text-color: #e0e0e0;
-            --console-bg: #000000;
-            --input-bg: #2d2d2d;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 800px;
-            background: var(--card-bg);
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-
-        h1 {
-            color: var(--accent-color);
-            margin-top: 0;
-            font-size: 24px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 10px;
-        }
-
-        .input-group {
-            margin-bottom: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        label {
-            font-size: 14px;
-            color: #aaa;
-            font-weight: bold;
-        }
-
-        input {
-            background-color: var(--input-bg);
-            border: 1px solid #444;
-            color: #fff;
-            padding: 10px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        input:focus {
-            border-color: var(--accent-color);
-            outline: none;
-        }
-
-        .control-panel {
-            margin: 20px 0;
-            display: flex;
-            gap: 15px;
-        }
-
-        button {
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-        }
-
-        button:hover:not(:disabled) {
-            background-color: #e05500;
-        }
-
-        button:active:not(:disabled) {
-            transform: scale(0.98);
-        }
-
-        button:disabled {
-            background-color: #444;
-            color: #888;
-            cursor: not-allowed;
-        }
-
-        .stop-btn {
-            background-color: #cc0000;
-        }
-
-        .stop-btn:hover:not(:disabled) {
-            background-color: #aa0000;
-        }
-
-        .console-label {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #aaa;
-        }
-
-        .console {
-            background-color: var(--console-bg);
-            border: 1px solid #333;
-            border-radius: 4px;
-            padding: 15px;
-            height: 320px;
-            overflow-y: auto;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            box-sizing: border-box;
-        }
-
-        .log-entry {
-            margin-bottom: 4px;
-            word-break: break-all;
-        }
-
-        .log-wasm { color: #00ff00; }
-        .log-error { color: #ff3333; }
-        .log-info { color: #00bfff; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monero WASM Miner</title>
+<style>
+body{font-family:Arial;background:#121212;color:#eee;padding:20px}
+#log{background:#000;height:300px;overflow:auto;padding:10px;white-space:pre-wrap}
+input,button{margin:4px;padding:8px}
+</style>
 </head>
 <body>
+<h2>Monero WASM Miner</h2>
+<input id="walletInput" placeholder="Carteira XMR"><br>
+<input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
+<button id="startBtn" disabled>Iniciar</button>
+<button id="stopBtn" disabled>Parar</button>
+<div id="log"></div>
 
-    <div class="container">
-        <h1>Monero Web Miner (WASM + Threads)</h1>
-        
-        <div class="input-group">
-            <label for="walletInput">Endereço da Carteira Monero (XMR):</label>
-            <input type="text" id="walletInput" placeholder="Ex: 4657q4dnsjLWtzeW4XN3wG9..." value="4657q4dnsjLWtzeW4XN3wG9swFumWAZB9i1pegTLMxVAQy5E5AE8uif42kkHWcWc9vDcLUmzeCf3pV7mmrJQQqqe84dtASi">
-        </div>
+<script>
+const log=e=>{document.getElementById("log").textContent+=e+"\n";};
 
-        <div class="input-group">
-            <label for="workerInput">Nome do Worker (Identificador):</label>
-            <input type="text" id="workerInput" placeholder="Ex: web_worker_01" value="WasmMinerHtml">
-        </div>
+const base=new URL("./bin/",location.href).href;
 
-        <div class="control-panel">
-            <button id="startBtn" disabled>Iniciar Mineração</button>
-            <button id="stopBtn" class="stop-btn" disabled>Parar Mineração</button>
-        </div>
+const workerSource=`
+let ready=false;
+self.Module={
+ locateFile:(p)=>p.endsWith(".wasm")?"${base}miner.wasm":"${base}"+p,
+ print:t=>postMessage({type:"wasm",text:t}),
+ printErr:t=>postMessage({type:"error",text:t}),
+ onRuntimeInitialized(){ready=true;postMessage({type:"status",text:"ready"});}
+};
+importScripts("${base}miner.js");
+onmessage=(e)=>{
+ if(!ready){postMessage({type:"error",text:"Runtime não inicializado"});return;}
+ if(e.data.command==="start"){
+   Module.ccall("startMining","boolean",["string","string"],[e.data.walletAddress,e.data.workerName]);
+   postMessage({type:"status",text:"running"});
+ }
+ if(e.data.command==="stop"){
+   Module.ccall("stopMining",null,[],[]);
+   postMessage({type:"status",text:"stopped"});
+ }
+};`;
 
-        <div class="console-label">Terminal de Saída:</div>
-        <div class="console" id="logConsole">
-            <div class="log-entry log-info">[SISTEMA] Inicializando ambiente e carregando runtime do WebAssembly...</div>
-        </div>
-    </div>
-    <!-- 1. GANCHOS DE LOG DO EMSCRIPTEN -->
-    <script>
-        const logConsole = document.getElementById('logConsole');
+const worker=new Worker(URL.createObjectURL(new Blob([workerSource],{type:"application/javascript"})));
 
-        function appendToConsole(text, type = 'wasm') {
-            if (!logConsole) return;
-            const entry = document.createElement('div');
-            entry.classList.add('log-entry', `log-${type}`);
-            entry.textContent = text;
-            logConsole.appendChild(entry);
-            logConsole.scrollTop = logConsole.scrollHeight;
-        }
-    </script>
+const start=document.getElementById("startBtn");
+const stop=document.getElementById("stopBtn");
 
-    <!-- 2. CRIAÇÃO DINÂMICA DO WEB WORKER (CORREÇÃO DE PADRÃO DE URL) -->
-    <script>     
-        const minerWorker = new Worker(
-            new URL("./bin/miner.worker.js", window.location.href),
-            { type: "classic" }
-        );
-        // =====================================================================
-        // CONTROLE DA INTERFACE DO USUÁRIO (UI) VIA MENSAGENS DO WORKER
-        // =====================================================================
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
+worker.onmessage=(e)=>{
+ const {type,text}=e.data;
+ if(type==="wasm"||type==="error")log(text);
+ if(type==="status"){
+   log("[STATUS] "+text);
+   if(text==="ready"){start.disabled=false;}
+   if(text==="running"){stop.disabled=false;}
+   if(text==="stopped"){start.disabled=false;stop.disabled=true;}
+ }
+};
 
-        minerWorker.onmessage = function(e) {
-            const { type, text } = e.data;
-
-            if (type === 'log') console.log(text);
-            if (type === 'wasm') appendToConsole(text, 'wasm');
-            if (type === 'error') appendToConsole(text, 'error');
-            
-            if (type === 'status') {
-                if (text === 'ready') {
-                    appendToConsole("[SISTEMA] Módulo carregado no Worker Inline. Pronto para minerar!", 'info');
-                    startBtn.disabled = false;
-                }
-                if (text === 'running') {
-                    appendToConsole("[SISTEMA] 🚀 Sucesso! O motor de mineração foi ativado na thread secundária.", 'info');
-                    stopBtn.disabled = false;
-                }
-                if (text === 'failed') {
-                    appendToConsole("[SISTEMA] ❌ O motor startMining() recusou a inicialização.", 'error');
-                    startBtn.disabled = false;
-                }
-                if (text === 'stopped') {
-                    appendToConsole("[SISTEMA] 🛑 Mineração encerrada com sucesso.", 'info');
-                    startBtn.disabled = false;
-                }
-            }
-        };
-
-        // EVENTO: BOTÃO INICIAR
-        startBtn.addEventListener('click', () => {
-            const walletAddress = document.getElementById('walletInput').value.trim();
-            const workerName = document.getElementById('workerInput').value.trim();
-
-            if (!walletAddress) {
-                appendToConsole("[ERRO] Por favor, insira uma carteira Monero antes de iniciar.", "error");
-                return;
-            }
-
-            startBtn.disabled = true;
-            appendToConsole("[SISTEMA] Disparando comando assíncrono para o Worker Inline...", 'info');
-            
-            minerWorker.postMessage({
-                command: 'start',
-                walletAddress: walletAddress,
-                workerName: workerName
-            });
-        });
-
-        // EVENTO: BOTÃO PARAR
-        stopBtn.addEventListener('click', () => {
-            stopBtn.disabled = true;
-            appendToConsole("[SISTEMA] Solicitando parada das threads...", 'info');
-            minerWorker.postMessage({ command: 'stop' });
-        });
-    </script>
+start.onclick=()=>{
+ start.disabled=true;
+ worker.postMessage({
+   command:"start",
+   walletAddress:walletInput.value.trim(),
+   workerName:workerInput.value.trim()
+ });
+};
+stop.onclick=()=>{
+ worker.postMessage({command:"stop"});
+};
+</script>
 </body>
 </html>
