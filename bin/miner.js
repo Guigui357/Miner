@@ -4514,8 +4514,22 @@ function _emscripten_websocket_set_onclose_callback_on_thread(socketId, userData
  return 0;
 }
 
-function _emscripten_websocket_set_onmessage_callback_on_thread(socketId, userData, callbackFunc, thread) {
+function _emscripten_websocket_set_onerror_callback_on_thread(socketId, userData, callbackFunc, thread) {
  if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(19, 1, socketId, userData, callbackFunc, thread);
+ if (!WS.socketEvent) WS.socketEvent = _malloc(1024);
+ var socket = WS.sockets[socketId];
+ if (!socket) {
+  return -3;
+ }
+ socket.onerror = function(e) {
+  GROWABLE_HEAP_U32()[WS.socketEvent >> 2] = socketId;
+  getWasmTableEntry(callbackFunc)(0, /*TODO*/ WS.socketEvent, userData);
+ };
+ return 0;
+}
+
+function _emscripten_websocket_set_onmessage_callback_on_thread(socketId, userData, callbackFunc, thread) {
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(20, 1, socketId, userData, callbackFunc, thread);
  if (!WS.socketEvent) WS.socketEvent = _malloc(1024);
  var socket = WS.sockets[socketId];
  if (!socket) {
@@ -4542,7 +4556,7 @@ function _emscripten_websocket_set_onmessage_callback_on_thread(socketId, userDa
 }
 
 function _emscripten_websocket_set_onopen_callback_on_thread(socketId, userData, callbackFunc, thread) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(20, 1, socketId, userData, callbackFunc, thread);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(21, 1, socketId, userData, callbackFunc, thread);
  if (!WS.socketEvent) WS.socketEvent = _malloc(1024);
  var socket = WS.sockets[socketId];
  if (!socket) {
@@ -4592,7 +4606,7 @@ var stringToAscii = (str, buffer) => {
 };
 
 var _environ_get = function(__environ, environ_buf) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(21, 1, __environ, environ_buf);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(22, 1, __environ, environ_buf);
  var bufSize = 0;
  getEnvStrings().forEach((string, i) => {
   var ptr = environ_buf + bufSize;
@@ -4604,7 +4618,7 @@ var _environ_get = function(__environ, environ_buf) {
 };
 
 var _environ_sizes_get = function(penviron_count, penviron_buf_size) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(22, 1, penviron_count, penviron_buf_size);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(23, 1, penviron_count, penviron_buf_size);
  var strings = getEnvStrings();
  GROWABLE_HEAP_U32()[((penviron_count) >> 2)] = strings.length;
  var bufSize = 0;
@@ -4614,7 +4628,7 @@ var _environ_sizes_get = function(penviron_count, penviron_buf_size) {
 };
 
 function _fd_close(fd) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(23, 1, fd);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(24, 1, fd);
  try {
   var stream = SYSCALLS.getStreamFromFD(fd);
   FS.close(stream);
@@ -4643,7 +4657,7 @@ function _fd_close(fd) {
 };
 
 function _fd_read(fd, iov, iovcnt, pnum) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(24, 1, fd, iov, iovcnt, pnum);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(25, 1, fd, iov, iovcnt, pnum);
  try {
   var stream = SYSCALLS.getStreamFromFD(fd);
   var num = doReadv(stream, iov, iovcnt);
@@ -4656,7 +4670,7 @@ function _fd_read(fd, iov, iovcnt, pnum) {
 }
 
 function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(25, 1, fd, offset_low, offset_high, whence, newOffset);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(26, 1, fd, offset_low, offset_high, whence, newOffset);
  var offset = convertI32PairToI53Checked(offset_low, offset_high);
  try {
   if (isNaN(offset)) return 61;
@@ -4689,7 +4703,7 @@ function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
 };
 
 function _fd_write(fd, iov, iovcnt, pnum) {
- if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(26, 1, fd, iov, iovcnt, pnum);
+ if (ENVIRONMENT_IS_PTHREAD) return proxyToMainThread(27, 1, fd, iov, iovcnt, pnum);
  try {
   var stream = SYSCALLS.getStreamFromFD(fd);
   var num = doWritev(stream, iov, iovcnt);
@@ -5065,7 +5079,7 @@ FS.createPreloadedFile = FS_createPreloadedFile;
 
 FS.staticInit();
 
-var proxiedFunctionTable = [ _proc_exit, exitOnMainThread, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_fstat64, ___syscall_ioctl, ___syscall_lstat64, ___syscall_newfstatat, ___syscall_openat, ___syscall_rmdir, ___syscall_stat64, ___syscall_unlinkat, __mmap_js, __munmap_js, _emscripten_websocket_close, _emscripten_websocket_is_supported, _emscripten_websocket_new, _emscripten_websocket_send_utf8_text, _emscripten_websocket_set_onclose_callback_on_thread, _emscripten_websocket_set_onmessage_callback_on_thread, _emscripten_websocket_set_onopen_callback_on_thread, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write ];
+var proxiedFunctionTable = [ _proc_exit, exitOnMainThread, pthreadCreateProxied, ___syscall_fcntl64, ___syscall_fstat64, ___syscall_ioctl, ___syscall_lstat64, ___syscall_newfstatat, ___syscall_openat, ___syscall_rmdir, ___syscall_stat64, ___syscall_unlinkat, __mmap_js, __munmap_js, _emscripten_websocket_close, _emscripten_websocket_is_supported, _emscripten_websocket_new, _emscripten_websocket_send_utf8_text, _emscripten_websocket_set_onclose_callback_on_thread, _emscripten_websocket_set_onerror_callback_on_thread, _emscripten_websocket_set_onmessage_callback_on_thread, _emscripten_websocket_set_onopen_callback_on_thread, _environ_get, _environ_sizes_get, _fd_close, _fd_read, _fd_seek, _fd_write ];
 
 function checkIncomingModuleAPI() {
  ignoredModuleProp("fetchSettings");
@@ -5109,6 +5123,7 @@ var wasmImports = {
  /** @export */ emscripten_websocket_new: _emscripten_websocket_new,
  /** @export */ emscripten_websocket_send_utf8_text: _emscripten_websocket_send_utf8_text,
  /** @export */ emscripten_websocket_set_onclose_callback_on_thread: _emscripten_websocket_set_onclose_callback_on_thread,
+ /** @export */ emscripten_websocket_set_onerror_callback_on_thread: _emscripten_websocket_set_onerror_callback_on_thread,
  /** @export */ emscripten_websocket_set_onmessage_callback_on_thread: _emscripten_websocket_set_onmessage_callback_on_thread,
  /** @export */ emscripten_websocket_set_onopen_callback_on_thread: _emscripten_websocket_set_onopen_callback_on_thread,
  /** @export */ environ_get: _environ_get,
