@@ -4,72 +4,133 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monero WASM Miner</title>
+
 <style>
-body{font-family:Arial;background:#121212;color:#eee;padding:20px}
-#log{background:#000;height:300px;overflow:auto;padding:10px;white-space:pre-wrap}
-input,button{margin:4px;padding:8px}
+body{
+    font-family:Arial;
+    background:#121212;
+    color:#eee;
+    padding:20px
+}
+#log{
+    background:#000;
+    height:300px;
+    overflow:auto;
+    padding:10px;
+    white-space:pre-wrap
+}
+input,button{
+    margin:4px;
+    padding:8px
+}
 </style>
 </head>
+
 <body>
+
 <h2>Monero WASM Miner</h2>
+
 <input id="walletInput" placeholder="Carteira XMR"><br>
 <input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
+
 <button id="startBtn" disabled>Iniciar</button>
 <button id="stopBtn" disabled>Parar</button>
+
 <div id="log"></div>
 
+
 <script>
-const log=e=>{document.getElementById("log").textContent+=e+"\n";};
 
-const base=new URL("./bin/",location.href).href;
-
-const workerSource=`
-let ready=false;
-self.Module={
- print:t=>postMessage({type:"wasm",text:t}),
- printErr:t=>postMessage({type:"error",text:t}),
- onRuntimeInitialized(){ready=true;postMessage({type:"status",text:"ready"});}
+const log = e => {
+    document.getElementById("log").textContent += e + "\n";
 };
-importScripts("${base}miner.js");
-onmessage=(e)=>{
- if(!ready){postMessage({type:"error",text:"Runtime não inicializado"});return;}
- if(e.data.command==="start"){
-   Module.ccall("startMining","boolean",["string","string"],[e.data.walletAddress,e.data.workerName]);
-   postMessage({type:"status",text:"running"});
- }
- if(e.data.command==="stop"){
-   Module.ccall("stopMining",null,[],[]);
-   postMessage({type:"status",text:"stopped"});
- }
-};`;
 
-const worker=new Worker(URL.createObjectURL(new Blob([workerSource],{type:"application/javascript"})));
+
+var Module = {
+
+    print(text){
+        log(text);
+    },
+
+    printErr(text){
+        log("[ERR] " + text);
+    },
+
+    onRuntimeInitialized(){
+
+        log("[STATUS] ready");
+
+        document.getElementById("startBtn").disabled=false;
+    }
+};
+
+
+</script>
+
+
+<script src="./bin/miner.js"></script>
+
+
+<script>
 
 const start=document.getElementById("startBtn");
 const stop=document.getElementById("stopBtn");
 
-worker.onmessage=(e)=>{
- const {type,text}=e.data;
- if(type==="wasm"||type==="error")log(text);
- if(type==="status"){
-   log("[STATUS] "+text);
-   if(text==="ready"){start.disabled=false;}
-   if(text==="running"){stop.disabled=false;}
-   if(text==="stopped"){start.disabled=false;stop.disabled=true;}
- }
-};
 
 start.onclick=()=>{
- start.disabled=true;
- worker.postMessage({
-   command:"start",
-   walletAddress:walletInput.value.trim(),
-   workerName:workerInput.value.trim()
- });
+
+    start.disabled=true;
+
+    let wallet =
+        document.getElementById("walletInput")
+        .value.trim();
+
+    let worker =
+        document.getElementById("workerInput")
+        .value.trim();
+
+
+    let result = Module.ccall(
+        "startMining",
+        "boolean",
+        ["string","string"],
+        [wallet,worker]
+    );
+
+
+    if(result){
+
+        log("[STATUS] running");
+        stop.disabled=false;
+
+    }else{
+
+        log("[STATUS] falha ao iniciar");
+        start.disabled=false;
+    }
+
 };
+
+
 stop.onclick=()=>{
- worker.postMessage({command:"stop"});
+
+    Module.ccall(
+        "stopMining",
+        null,
+        [],
+        []
+    );
+
+
+    log("[STATUS] stopped");
+
+    start.disabled=false;
+    stop.disabled=true;
+
 };
+
+
 </script>
+
 </body>
 </html>
