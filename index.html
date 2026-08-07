@@ -26,7 +26,6 @@ const base=new URL("./bin/",location.href).href;
 const workerSource=`
 let ready=false;
 self.Module={
- locateFile:(p)=>p.endsWith(".wasm")?"${base}miner.wasm":"${base}"+p,
  print:t=>postMessage({type:"wasm",text:t}),
  printErr:t=>postMessage({type:"error",text:t}),
  onRuntimeInitialized(){ready=true;postMessage({type:"status",text:"ready"});}
