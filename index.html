@@ -180,89 +180,11 @@
     </script>
 
     <!-- 2. CRIAÇÃO DINÂMICA DO WEB WORKER (CORREÇÃO DE PADRÃO DE URL) -->
-    <script>
-        // Captura a URL base real de onde o seu site está rodando (Vercel, Localhost, etc.)
-        const baseServerUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-        const absoluteScriptPath = baseServerUrl + 'bin/miner.js';
-        const absoluteWasmPath = baseServerUrl + 'bin/miner.wasm'; // Caminho absoluto para o .wasm
-
-        // Montamos o código do worker injetando as rotas absolutas resolvidas
-        const workerCode = `
-            self.console = {
-                log: function(msg) { self.postMessage({ type: 'log', text: msg }); },
-                error: function(msg) { self.postMessage({ type: 'error', text: msg }); }
-            };
-
-            self.Module = {
-                print: function(text) { self.postMessage({ type: 'wasm', text: text }); },
-                printErr: function(text) { 
-                    if (!text.includes("missing function") && !text.includes("deprecated")) {
-                        self.postMessage({ type: 'error', text: text }); 
-                    }
-                },
-                // CORREÇÃO CRÍTICA: Diz ao Emscripten exatamente onde o miner.wasm está hospedado.
-                // Isso impede o congelamento do resolvedor "wasm-instantiate".
-                locateFile: function(path, scriptDirectory) {
-                    if (path.endsWith('.wasm')) {
-                        return '${absoluteWasmPath}';
-                    }
-                    return scriptDirectory + path;
-                },
-                onRuntimeInitialized: function() {
-                    self.postMessage({ type: 'status', text: 'ready' });
-                }
-            };
-
-            try {
-                importScripts('${absoluteScriptPath}');
-                
-                // Fallback dinâmico: se o compilador já carregou os hooks, libera o botão imediatamente
-                if (self.Module.runtimeInitialized || (typeof Module !== 'undefined' && Module.runtimeInitialized)) {
-                    self.postMessage({ type: 'status', text: 'ready' });
-                }
-            } catch (err) {
-                self.postMessage({ type: 'error', text: 'Falha ao carregar importScripts: ' + err.message });
-            }
-
-            self.onmessage = function(e) {
-                const { command, walletAddress, workerName } = e.data;
-
-                if (command === 'start') {
-                    try {
-                        const emscriptenCcall = self.Module.ccall || (Module && Module.ccall);
-                        if (typeof emscriptenCcall === "function") {
-                            const success = emscriptenCcall(
-                                'startMining',
-                                'boolean',
-                                ['string', 'string'],
-                                [walletAddress, workerName]
-                            );
-                            self.postMessage({ type: 'status', text: success ? 'running' : 'failed' });
-                        } else {
-                            throw new Error("O método ccall não foi exportado pelo runtime.");
-                        }
-                    } catch (err) {
-                        self.postMessage({ type: 'error', text: 'Falha no ccall do Worker: ' + err.message });
-                    }
-                }
-
-                if (command === 'stop') {
-                    const emscriptenCcall = self.Module.ccall || (Module && Module.ccall);
-                    if (typeof emscriptenCcall === "function") {
-                        emscriptenCcall('stopMining', 'void', [], []);
-                        self.postMessage({ type: 'status', text: 'stopped' });
-                    }
-                }
-            };
-        `;
-
-        // Instanciação segura usando a string convertida em Blob de dados
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const workerUrl = URL.createObjectURL(blob);
-        
-        appendToConsole("[SISTEMA] Instanciando Web Worker inline isolado...", 'info');
-        const minerWorker = new Worker(workerUrl);
-
+    <script>     
+        const minerWorker = new Worker(
+            new URL("./bin/miner.worker.js", window.location.href),
+            { type: "classic" }
+        );
         // =====================================================================
         // CONTROLE DA INTERFACE DO USUÁRIO (UI) VIA MENSAGENS DO WORKER
         // =====================================================================
