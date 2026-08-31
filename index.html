@@ -7,7 +7,7 @@
 
 <style>
 body{
-    font-family:Arial;
+    font-family:Arial, sans-serif;
     background:#121212;
     color:#eee;
     padding:20px
@@ -17,20 +17,43 @@ body{
     height:300px;
     overflow:auto;
     padding:10px;
-    white-space:pre-wrap
+    white-space:pre-wrap;
+    font-family: monospace;
+    border: 1px solid #333;
+    margin-top: 10px;
 }
 input,button{
     margin:4px;
-    padding:8px
+    padding:8px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+}
+input{
+    width: 300px;
+}
+button:disabled {
+    background: #555;
+    color: #aaa;
+    cursor: not-allowed;
+}
+button:not(:disabled) {
+    background: #f60;
+    cursor: pointer;
+    font-weight: bold;
+}
+#stopBtn:not(:disabled) {
+    background: #d32f2f;
 }
 </style>
 </head>
 
 <body>
 
-<h2>Monero WASM Miner</h2>
+<h2>Monero WASM Miner (Multi-Thread)</h2>
 
-<input id="walletInput" placeholder="Carteira XMR"><br>
+<input id="walletInput" placeholder="Carteira XMR" value=""><br>
 <input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
 
 <button id="startBtn" disabled>Iniciar</button>
@@ -39,207 +62,137 @@ input,button{
 <div id="log"></div>
 
 <script>
+// Função global de logs na tela
 const log = e => {
     document.getElementById("log").textContent += e + "\n";
+    const logDiv = document.getElementById("log");
+    logDiv.scrollTop = logDiv.scrollHeight;
 };
 
+// 1. Detecta núcleos lógicos e calcula o limite de cache para RandomX (Threads = Cores / 2)
 const coresLogicas = navigator.hardwareConcurrency || 4;
 const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
+log(`[SISTEMA] Cores detectados: ${coresLogicas}. Solicitando ${threadsOtimizadas} threads.`);
 
-// Força a criação do objeto Module no escopo global absoluto
-window.Module = {
+// Validar se os cabeçalhos do vercel.json ativaram o SharedArrayBuffer com sucesso
+if (typeof SharedArrayBuffer !== 'undefined') {
+    log(`[SISTEMA] SharedArrayBuffer validado com sucesso. Ambiente seguro para multi-threading.`);
+} else {
+    log(`[ERRO DE SEGURANÇA] SharedArrayBuffer não está disponível. Certifique-se de que o vercel.json está na raiz.`);
+}
+
+// Configuração do ambiente injetada no escopo global antes do arquivo carregar
+const minerConfig = {
     numThreads: threadsOtimizadas,
-    
-    // Força o Emscripten a entender a rota local exata na Vercel
     mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
-    
     locateFile: function(path) {
         return '/bin/' + path;
     },
-
-    print(text){
-        log(text);
+    print: function(text) { 
+        log(text); 
     },
-
-    printErr(text){
-        log("[ERR] " + text);
+    printErr: function(text) { 
+        log("[WASM ERR] " + text); 
     },
-
-    // Captura erros críticos que o Emscripten costuma ocultar do console
-    onAbort(what) {
-        log("[CRÍTICO] O WebAssembly abortou a inicialização: " + what);
-    },
-
-    onRuntimeInitialized(){
-        log("[STATUS] pronto para minerar (onRuntimeInitialized disparado)");
+    onRuntimeInitialized: function() {
+        log("[STATUS] pronto para minerar (Callback disparado)");
         document.getElementById("startBtn").disabled = false;
     }
 };
 
-// MOTOR DE VERIFICAÇÃO FORÇADA
-// Se após 4 segundos o runtime não disparar o callback padrão, mas o código JS
-// já tiver injetado as funções de C++ no objeto Module, nós forçamos a ativação do botão.
-setInterval(() => {
-    const btn = document.getElementById("startBtn");
-    if (btn.disabled && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
-        log("[SISTEMA] Runtime detectado na memória via varredura secundária. Ativando botão!");
-        btn.disabled = false;
-    }
-}, 2000);
+window.Module = minerConfig;
 </script>
 
-<!-- Carrega o script unificado embutido gerado via GitHub Actions -->
-<script src="./bin/miner.js"></script>
+<!-- 2. Carrega o arquivo unificado vindo das GitHub Actions -->
+<script src="./bin/miner.js" 
+        onload="console.log('[SISTEMA] Script miner.js baixado com sucesso.')"
+        onerror="log('[ERRO CRÍTICO] Falha ao carregar /bin/miner.js. Verifique se o arquivo existe na pasta.')">
+</script>
 
 <script>
-const start=document.getElementById("startBtn");
-const stop=document.getElementById("stopBtn");
+// 3. MOTOR DE INICIALIZAÇÃO ASSÍNCRONA 
+// Varre as variações de compilação do Emscripten para extrair a interface C++
+try {
+    if (typeof MoneroMiner === 'function') {
+        log("[SISTEMA] Detectada fábrica modular (MoneroMiner). Inicializando...");
+        MoneroMiner(minerConfig).then(function(instance) {
+            window.Module = instance;
+            log("[STATUS] pronto para minerar (Módulo carregado via Promise)");
+            document.getElementById("startBtn").disabled = false;
+        });
+    } else if (typeof Module === 'function') {
+        log("[SISTEMA] Detectada fábrica modular (Module). Inicializando...");
+        Module(minerConfig).then(function(instance) {
+            window.Module = instance;
+            log("[STATUS] pronto para minerar (Módulo carregado via Promise)");
+            document.getElementById("startBtn").disabled = false;
+        });
+    } else {
+        // Fallback: Varre a memória periodicamente para pegar o carregamento clássico
+        let checkCounter = 0;
+        const memoryCheck = setInterval(() => {
+            checkCounter++;
+            if (window.Module && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
+                log("[SISTEMA] Módulo detectado na memória global via varredura secundária.");
+                document.getElementById("startBtn").disabled = false;
+                clearInterval(memoryCheck);
+            }
+            if (checkCounter > 5) clearInterval(memoryCheck); // Para após 10 segundos
+        }, 2000);
+    }
+} catch (err) {
+    log("[ERRO INTEGRAL] Falha no mapeamento do binário: " + err.message);
+}
 
-start.onclick=()=>{
-    start.disabled=true;
+// 4. Lógica de controle e execução das funções do Minerador
+const start = document.getElementById("startBtn");
+const stop = document.getElementById("stopBtn");
 
+start.onclick = () => {
     let wallet = document.getElementById("walletInput").value.trim();
     let worker = document.getElementById("workerInput").value.trim();
 
-    if(!wallet) {
-        log("[AVISO] Insira uma carteira XMR válida.");
-        start.disabled=false;
+    if (!wallet) {
+        log("[AVISO] Por favor, insira uma carteira Monero (XMR) antes de iniciar.");
         return;
     }
 
-    log(`[STATUS] Inicializando threads e conectando a pool...`);
+    start.disabled = true;
+    log(`[STATUS] Executando startMining em segundo plano com ${window.Module.numThreads || threadsOtimizadas} threads...`);
 
-    // 3. Executa a função do minerador forçada pelo C++
-    let result = Module.ccall(
-        "startMining",
-        "boolean",
-        ["string","string"],
-        [wallet,worker]
-    );
+    try {
+        // Executa a ponte C++ do seu repositório original forkeado
+        let result = window.Module.ccall(
+            "startMining",
+            "boolean",
+            ["string", "string"],
+            [wallet, worker]
+        );
 
-    if(result){
-        log("[STATUS] minerando em segundo plano (multi-thread active)");
-        stop.disabled=false;
-    }else{
-        log("[STATUS] falha ao iniciar");
-        start.disabled=false;
+        if (result) {
+            log("[STATUS] minerando (Múltiplas threads em execução!)");
+            stop.disabled = false;
+        } else {
+            log("[STATUS] falha ao iniciar: a função startMining retornou falso.");
+            start.disabled = false;
+        }
+    } catch (e) {
+        log("[ERRO AO EXECUTAR] A função 'startMining' falhou. Detalhes: " + e.message);
+        start.disabled = false;
     }
 };
 
-stop.onclick=()=>{
-    Module.ccall(
-        "stopMining",
-        null,
-        [],
-        []
-    );
-
-    log("[STATUS] parado");
-    start.disabled=false;
-    stop.disabled=true;
-};
-</script>
-
-</body>
-</html>
-<button id="stopBtn" disabled>Parar</button>
-
-<div id="log"></div>
-
-
-<script>
-
-const log = e => {
-    document.getElementById("log").textContent += e + "\n";
-};
-
-
-var Module = {
-
-    print(text){
-        log(text);
-    },
-
-    printErr(text){
-        log("[ERR] " + text);
-    },
-
-    onRuntimeInitialized(){
-
-        log("[STATUS] ready");
-
-        document.getElementById("startBtn").disabled=false;
+stop.onclick = () => {
+    try {
+        window.Module.ccall("stopMining", null, [], []);
+        log("[STATUS] minerador parado com sucesso.");
+        start.disabled = false;
+        stop.disabled = true;
+    } catch (e) {
+        log("[ERR] Falha ao invocar stopMining: " + e.message);
     }
 };
-
-
-</script>
-
-
-<script src="./bin/miner.js"></script>
-
-
-<script>
-
-const start=document.getElementById("startBtn");
-const stop=document.getElementById("stopBtn");
-
-
-start.onclick=()=>{
-
-    start.disabled=true;
-
-    let wallet =
-        document.getElementById("walletInput")
-        .value.trim();
-
-    let worker =
-        document.getElementById("workerInput")
-        .value.trim();
-
-
-    let result = Module.ccall(
-        "startMining",
-        "boolean",
-        ["string","string"],
-        [wallet,worker]
-    );
-
-
-    if(result){
-
-        log("[STATUS] running");
-        stop.disabled=false;
-
-    }else{
-
-        log("[STATUS] falha ao iniciar");
-        start.disabled=false;
-    }
-
-};
-
-
-stop.onclick=()=>{
-
-    Module.ccall(
-        "stopMining",
-        null,
-        [],
-        []
-    );
-
-
-    log("[STATUS] stopped");
-
-    start.disabled=false;
-    stop.disabled=true;
-
-};
-
-
 </script>
 
 </body>
