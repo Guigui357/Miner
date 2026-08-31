@@ -298,18 +298,8 @@ window.Module = {
 </script>
 
 <script>
-// Varredura de segurança para liberação manual do botão
-const varreMemoria = setInterval(() => {
-    const btn = document.getElementById("startBtn");
-    // Só libera se o módulo nativo NÃO tiver abortado e possuir a interface C++ montada
-    if (btn.disabled && window.Module.ccall && !window.Module.ABORT) {
-        log("[SISTEMA] Funções de mineração ativas em memória. Liberando botão!");
-        btn.disabled = false;
-        clearInterval(varreMemoria);
-    }
-}, 1500);
+// Substitua o bloco de scripts final por este:
 
-// Controles do Minerador
 const start = document.getElementById("startBtn");
 const stop = document.getElementById("stopBtn");
 
@@ -318,38 +308,88 @@ start.onclick = () => {
     let worker = document.getElementById("workerInput").value.trim();
 
     if (!wallet) {
-        log("[AVISO] Digite sua carteira XMR.");
+        log("[AVISO] Por favor, digite sua carteira XMR.");
         return;
     }
 
     start.disabled = true;
-    log(`[STATUS] Inicializando com ${window.Module.numThreads || threadsOtimizadas} threads ativos...`);
+    log(`[STATUS] Procurando função de mineração correspondente em memória...`);
+
+    // RASTREADOR DE FUNÇÕES: Varre o objeto Module em busca de qualquer menção a "mining" ou "start"
+    let funcoesEncontradas = [];
+    if (window.Module) {
+        for (let prop in window.Module) {
+            if (prop.toLowerCase().includes("min") || prop.toLowerCase().includes("start")) {
+                funcoesEncontradas.push(prop);
+            }
+        }
+    }
+    
+    if (funcoesEncontradas.length > 0) {
+        log(`[RASTREADOR] Funções nativas detectadas: [${funcoesEncontradas.join(", ")}]`);
+    } else {
+        log(`[RASTREADOR] Nenhuma função óbvia encontrada com 'min' ou 'start'.`);
+    }
 
     try {
-        let result = window.Module.ccall(
-            "startMining",
-            "boolean",
-            ["string", "string"],
-            [wallet, worker]
-        );
+        let result = false;
+        
+        // 1. Tenta variações de nomes comuns gerados pelo compilador do MoneroMiner
+        if (window.Module.ccall) {
+            // Tenta as três variações mais comuns de exportação de string do Emscripten
+            const funcoesParaTestar = ["startMining", "start_mining", "start"];
+            for (let func of funcoesParaTestar) {
+                try {
+                    result = window.Module.ccall(func, "boolean", ["string", "string"], [wallet, worker]);
+                    if (result) { log(`[SISTEMA] Conectado via ccall("${func}")!`); break; }
+                } catch(e) {}
+            }
+        }
+        
+        // 2. Tenta execução direta pelos ponteiros do C++ (Caso o ccall tenha sido removido na otimização -O3)
+        if (!result) {
+            const ptrWallet = window.Module.allocateUTF8 ? window.Module.allocateUTF8(wallet) : 0;
+            const ptrWorker = window.Module.allocateUTF8 ? window.Module.allocateUTF8(worker) : 0;
+            
+            // Varre as variações diretas de sublinhado do compilador do Linux/Actions
+            const metodosDiretos = ["_startMining", "__startMining", "_start_mining", "_start"];
+            for (let metodo of metodosDiretos) {
+                if (typeof window.Module[metodo] === 'function') {
+                    log(`[SISTEMA] Tentando execução direta via window.Module.${metodo}...`);
+                    result = window.Module[metodo](ptrWallet, ptrWorker);
+                    if (result || result === undefined) { 
+                        result = true; 
+                        log(`[STATUS] Invocado com sucesso via ${metodo}!`);
+                        break; 
+                    }
+                }
+            }
+        }
 
         if (result) {
-            log("[STATUS] Minerando com sucesso!");
+            log("[STATUS] Minerador inicializado com sucesso (Multi-threads ativas)!");
             stop.disabled = false;
         } else {
-            log("[STATUS] A função startMining recusou os parâmetros.");
-            start.disabled = false;
+            throw new Error("O ponto de entrada C++ não respondeu a nenhum dos formatos de teste padrão.");
         }
     } catch (e) {
-        log("[ERRO C++] Falha na ponte WebAssembly: " + e.message);
+        log("[ERRO DE INTERFACE] " + e.message);
         start.disabled = false;
     }
 };
 
 stop.onclick = () => {
     try {
-        window.Module.ccall("stopMining", null, [], []);
-        log("[STATUS] Minerador parado.");
+        const paradas = ["stopMining", "stop_mining", "stop", "_stopMining", "_stop_mining"];
+        for (let p of paradas) {
+            if (window.Module.ccall) {
+                try { window.Module.ccall(p, null, [], []); } catch(e) {}
+            }
+            if (typeof window.Module[p] === 'function') {
+                try { window.Module[p](); } catch(e) {}
+            }
+        }
+        log("[STATUS] Comando de parada enviado.");
         start.disabled = false;
         stop.disabled = true;
     } catch (e) {
@@ -357,6 +397,5 @@ stop.onclick = () => {
     }
 };
 </script>
-
 </body>
 </html>
