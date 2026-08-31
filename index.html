@@ -43,16 +43,16 @@ const log = e => {
     document.getElementById("log").textContent += e + "\n";
 };
 
-// 1. Detecta núcleos lógicos e aplica a regra de ouro do RandomX (Threads = Cores / 2)
+// Detecta núcleos lógicos e aplica a regra de ouro do RandomX (Threads = Cores / 2)
 const coresLogicas = navigator.hardwareConcurrency || 4;
 const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Alocando ${threadsOtimizadas} threads para o RandomX.`);
+log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
 
-var Module = {
-    // 2. Ativa as variáveis do Emscripten para forçar Multi-Threading em arquivo único
+// Força a criação do objeto Module de forma global e robusta
+window.Module = {
     numThreads: threadsOtimizadas,
-    mainScriptUrlOrBlob: './bin/miner.js', // Força os Workers a acharem o script mãe na Vercel
+    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js', // Resolve o caminho absoluto de forma dinâmica na Vercel
 
     print(text){
         log(text);
@@ -63,11 +63,22 @@ var Module = {
     },
 
     onRuntimeInitialized(){
-        log("[STATUS] pronto para minerar");
-        document.getElementById("startBtn").disabled=false;
+        log("[STATUS] pronto para minerar (onRuntimeInitialized disparado)");
+        document.getElementById("startBtn").disabled = false;
     }
 };
+
+// SISTEMA DE SEGURANÇA: Se o Emscripten demorar para responder ou disparar o callback de outra forma, 
+// este validador destrava o botão se o objeto do WebAssembly estiver presente na memória após 3 segundos.
+setTimeout(() => {
+    const btn = document.getElementById("startBtn");
+    if (btn.disabled && (window.Module.asm || window.Module.ccall)) {
+        log("[SISTEMA] Ignorando atraso de inicialização. Destravando minerador.");
+        btn.disabled = false;
+    }
+}, 3000);
 </script>
+
 
 <!-- Carrega o script unificado embutido gerado via GitHub Actions -->
 <script src="./bin/miner.js"></script>
