@@ -38,6 +38,95 @@ input,button{
 
 <div id="log"></div>
 
+<script>
+const log = e => {
+    document.getElementById("log").textContent += e + "\n";
+};
+
+// 1. Detecta núcleos lógicos e aplica a regra de ouro do RandomX (Threads = Cores / 2)
+const coresLogicas = navigator.hardwareConcurrency || 4;
+const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
+
+log(`[SISTEMA] Cores detectados: ${coresLogicas}. Alocando ${threadsOtimizadas} threads para o RandomX.`);
+
+var Module = {
+    // 2. Ativa as variáveis do Emscripten para forçar Multi-Threading em arquivo único
+    numThreads: threadsOtimizadas,
+    mainScriptUrlOrBlob: './bin/miner.js', // Força os Workers a acharem o script mãe na Vercel
+
+    print(text){
+        log(text);
+    },
+
+    printErr(text){
+        log("[ERR] " + text);
+    },
+
+    onRuntimeInitialized(){
+        log("[STATUS] pronto para minerar");
+        document.getElementById("startBtn").disabled=false;
+    }
+};
+</script>
+
+<!-- Carrega o script unificado embutido gerado via GitHub Actions -->
+<script src="./bin/miner.js"></script>
+
+<script>
+const start=document.getElementById("startBtn");
+const stop=document.getElementById("stopBtn");
+
+start.onclick=()=>{
+    start.disabled=true;
+
+    let wallet = document.getElementById("walletInput").value.trim();
+    let worker = document.getElementById("workerInput").value.trim();
+
+    if(!wallet) {
+        log("[AVISO] Insira uma carteira XMR válida.");
+        start.disabled=false;
+        return;
+    }
+
+    log(`[STATUS] Inicializando threads e conectando a pool...`);
+
+    // 3. Executa a função do minerador forçada pelo C++
+    let result = Module.ccall(
+        "startMining",
+        "boolean",
+        ["string","string"],
+        [wallet,worker]
+    );
+
+    if(result){
+        log("[STATUS] minerando em segundo plano (multi-thread active)");
+        stop.disabled=false;
+    }else{
+        log("[STATUS] falha ao iniciar");
+        start.disabled=false;
+    }
+};
+
+stop.onclick=()=>{
+    Module.ccall(
+        "stopMining",
+        null,
+        [],
+        []
+    );
+
+    log("[STATUS] parado");
+    start.disabled=false;
+    stop.disabled=true;
+};
+</script>
+
+</body>
+</html>
+<button id="stopBtn" disabled>Parar</button>
+
+<div id="log"></div>
+
 
 <script>
 
