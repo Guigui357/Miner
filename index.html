@@ -73,6 +73,155 @@ const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
 log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
 
+// --- PATCH DE MEMÓRIA PARA ANDROID ---
+// Intercepta a criação de memória do WebAssembly para evitar o travamento por estouro de cota inicial
+const originalWasmMemory = WebAssembly.Memory;
+WebAssembly.Memory = function(opts) {
+    log("[PATCH] Capturada tentativa de alocação de memória compartilhada.");
+    if (opts && opts.initial) {
+        log(`[PATCH] Alocação original solicitada: ${(opts.initial * 65536 / 1024 / 1024).toFixed(0)} MB.`);
+        
+        // Se o script travar no Android tentando alocar 1GB fixo, forçamos um tamanho inicial menor (256MB)
+        // que pode crescer dinamicamente, passando pelo filtro de segurança do Chrome mobile.
+        if (opts.initial > 4096) { 
+            log("[PATCH] Reduzindo tamanho inicial para 256MB (com crescimento permitido) para evitar bloqueio no Android.");
+            opts.initial = 4096; // 4096 * 64KB = 256MB inicial estável
+        }
+    }
+    return new originalWasmMemory(opts);
+};
+
+window.Module = {
+    numThreads: threadsOtimizadas,
+    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
+    INITIAL_MEMORY: 268435456, // Força a configuração Javascript a bater com os 256MB do patch
+    
+    locateFile: function(path) {
+        return '/bin/' + path;
+    },
+    print: function(text) { 
+        log(text); 
+    },
+    printErr: function(text) { 
+        log("[WASM LOG] " + text); 
+    },
+    onAbort: function(err) {
+        log("[CRÍTICO] Inicialização abortada: " + err);
+    },
+    onRuntimeInitialized: function() {
+        log("[STATUS] Pronto para minerar (Callback disparado)");
+        document.getElementById("startBtn").disabled = false;
+    }
+};
+</script>
+
+<!-- Carrega o script após aplicar o Patch no motor do WebAssembly -->
+<script src="/bin/miner.js" 
+        onload="log('[SISTEMA] Binário miner.js carregado com sucesso pelo navegador.')"
+        onerror="log('[ERRO] Arquivo miner.js não foi encontrado em /bin/miner.js')">
+</script>
+
+<script>
+// Varredura de segurança agressiva
+const varreMemoria = setInterval(() => {
+    const btn = document.getElementById("startBtn");
+    if (btn.disabled && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
+        log("[SISTEMA] Funções de mineração mapeadas com sucesso. Liberando botão!");
+        btn.disabled = false;
+        clearInterval(varreMemoria);
+    }
+}, 1500);
+
+// Controles do Minerador
+const start = document.getElementById("startBtn");
+const stop = document.getElementById("stopBtn");
+
+start.onclick = () => {
+    let wallet = document.getElementById("walletInput").value.trim();
+    let worker = document.getElementById("workerInput").value.trim();
+
+    if (!wallet) {
+        log("[AVISO] Digite sua carteira XMR.");
+        return;
+    }
+
+    start.disabled = true;
+    log(`[STATUS] Inicializando com ${window.Module.numThreads || threadsOtimizadas} threads ativos...`);
+
+    try {
+        let result = window.Module.ccall(
+            "startMining",
+            "boolean",
+            ["string", "string"],
+            [wallet, worker]
+        );
+
+        if (result) {
+            log("[STATUS] Minerando com sucesso!");
+            stop.disabled = false;
+        } else {
+            log("[STATUS] A função startMining recusou a inicialização.");
+            start.disabled = false;
+        }
+    } catch (e) {
+        log("[ERRO C++] Falha na ponte WebAssembly: " + e.message);
+        start.disabled = false;
+    }
+};
+
+stop.onclick = () => {
+    try {
+        window.Module.ccall("stopMining", null, [], []);
+        log("[STATUS] Minerador parado.");
+        start.disabled = false;
+        stop.disabled = true;
+    } catch (e) {
+        log("[ERR] Falha ao parar: " + e.message);
+    }
+};
+</script>
+
+</body>
+</html>
+    background: #555;
+    color: #aaa;
+    cursor: not-allowed;
+}
+button:not(:disabled) {
+    background: #f60;
+    cursor: pointer;
+    font-weight: bold;
+}
+#stopBtn:not(:disabled) {
+    background: #d32f2f;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Monero WASM Miner (Multi-Thread)</h2>
+
+<input id="walletInput" placeholder="Carteira XMR" value=""><br>
+<input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
+
+<button id="startBtn" disabled>Iniciar</button>
+<button id="stopBtn" disabled>Parar</button>
+
+<div id="log"></div>
+
+<script>
+const log = e => {
+    document.getElementById("log").textContent += e + "\n";
+    const logDiv = document.getElementById("log");
+    logDiv.scrollTop = logDiv.scrollHeight;
+};
+
+const coresLogicas = navigator.hardwareConcurrency || 4;
+const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
+
+log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
+
 // Resolve a rota absoluta exata baseada no domínio atual da Vercel
 const baseScriptUrl = window.location.origin + '/bin/miner.js';
 
