@@ -43,16 +43,21 @@ const log = e => {
     document.getElementById("log").textContent += e + "\n";
 };
 
-// Detecta núcleos lógicos e aplica a regra de ouro do RandomX (Threads = Cores / 2)
 const coresLogicas = navigator.hardwareConcurrency || 4;
 const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
 log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
 
-// Força a criação do objeto Module de forma global e robusta
+// Força a criação do objeto Module no escopo global absoluto
 window.Module = {
     numThreads: threadsOtimizadas,
-    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js', // Resolve o caminho absoluto de forma dinâmica na Vercel
+    
+    // Força o Emscripten a entender a rota local exata na Vercel
+    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
+    
+    locateFile: function(path) {
+        return '/bin/' + path;
+    },
 
     print(text){
         log(text);
@@ -62,23 +67,28 @@ window.Module = {
         log("[ERR] " + text);
     },
 
+    // Captura erros críticos que o Emscripten costuma ocultar do console
+    onAbort(what) {
+        log("[CRÍTICO] O WebAssembly abortou a inicialização: " + what);
+    },
+
     onRuntimeInitialized(){
         log("[STATUS] pronto para minerar (onRuntimeInitialized disparado)");
         document.getElementById("startBtn").disabled = false;
     }
 };
 
-// SISTEMA DE SEGURANÇA: Se o Emscripten demorar para responder ou disparar o callback de outra forma, 
-// este validador destrava o botão se o objeto do WebAssembly estiver presente na memória após 3 segundos.
-setTimeout(() => {
+// MOTOR DE VERIFICAÇÃO FORÇADA
+// Se após 4 segundos o runtime não disparar o callback padrão, mas o código JS
+// já tiver injetado as funções de C++ no objeto Module, nós forçamos a ativação do botão.
+setInterval(() => {
     const btn = document.getElementById("startBtn");
-    if (btn.disabled && (window.Module.asm || window.Module.ccall)) {
-        log("[SISTEMA] Ignorando atraso de inicialização. Destravando minerador.");
+    if (btn.disabled && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
+        log("[SISTEMA] Runtime detectado na memória via varredura secundária. Ativando botão!");
         btn.disabled = false;
     }
-}, 3000);
+}, 2000);
 </script>
-
 
 <!-- Carrega o script unificado embutido gerado via GitHub Actions -->
 <script src="./bin/miner.js"></script>
