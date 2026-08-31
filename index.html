@@ -68,22 +68,21 @@ const log = e => {
     logDiv.scrollTop = logDiv.scrollHeight;
 };
 
-// 1. Configuração do ambiente com caminhos absolutos travados na Vercel
 const coresLogicas = navigator.hardwareConcurrency || 4;
 const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Solicitando ${threadsOtimizadas} threads.`);
+log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
 
-if (typeof SharedArrayBuffer !== 'undefined') {
-    log(`[SISTEMA] SharedArrayBuffer validado com sucesso.`);
-} else {
-    log(`[ERRO] SharedArrayBuffer bloqueado. Verifique o vercel.json.`);
-}
+// Resolve a rota absoluta exata baseada no domínio atual da Vercel
+const baseScriptUrl = window.location.origin + '/bin/miner.js';
 
 window.Module = {
     numThreads: threadsOtimizadas,
-    // Garante que os Workers do celular busquem o arquivo correto na raiz da Vercel
-    mainScriptUrlOrBlob: '/bin/miner.js',
+    
+    // O TRUQUE PARA O ANDROID: Passar a URL absoluta do servidor Vercel. 
+    // Isso diz para o Chrome do Android que o Worker vem do mesmo domínio seguro e verificado.
+    mainScriptUrlOrBlob: baseScriptUrl,
+    
     INITIAL_MEMORY: 1073741824,
     
     locateFile: function(path) {
@@ -96,33 +95,33 @@ window.Module = {
         log("[WASM LOG] " + text); 
     },
     onAbort: function(err) {
-        log("[CRÍTICO] WebAssembly abortado: " + err);
+        log("[CRÍTICO] Inicialização abortada: " + err);
     },
     onRuntimeInitialized: function() {
-        log("[STATUS] pronto para minerar (Callback disparado)");
+        log("[STATUS] Pronto para minerar (Callback disparado)");
         document.getElementById("startBtn").disabled = false;
     }
 };
 </script>
 
-<!-- 2. Carregamento do script usando caminho absoluto na Vercel -->
+<!-- Carregamento Nativo via Script Tag (Como o Android prefere para validar a origem) -->
 <script src="/bin/miner.js" 
-        onload="console.log('[SISTEMA] Script carregado.');"
-        onerror="log('[ERRO CRÍTICO] Falha ao ler /bin/miner.js. Verifique se o arquivo está na pasta bin/.')">
+        onload="log('[SISTEMA] Binário miner.js carregado com sucesso pelo navegador.')"
+        onerror="log('[ERRO] Arquivo miner.js não foi encontrado em /bin/miner.js')">
 </script>
 
 <script>
-// 3. Varredura contínua de memória para destravar o botão assim que o script for injetado
-const memoryCheck = setInterval(() => {
+// Varredura de segurança para destravar o Android se o script inicializar sem rodar o callback
+const varreMemoria = setInterval(() => {
     const btn = document.getElementById("startBtn");
     if (btn.disabled && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
-        log("[SISTEMA] Varre-memória localizou as funções do minerador. Liberando botão!");
+        log("[SISTEMA] Funções de mineração mapeadas na memória global. Liberando botão.");
         btn.disabled = false;
-        clearInterval(memoryCheck);
+        clearInterval(varreMemoria);
     }
 }, 1500);
 
-// 4. Controles do Minerador
+// Controles do Minerador
 const start = document.getElementById("startBtn");
 const stop = document.getElementById("stopBtn");
 
@@ -131,12 +130,12 @@ start.onclick = () => {
     let worker = document.getElementById("workerInput").value.trim();
 
     if (!wallet) {
-        log("[AVISO] Por favor, insira uma carteira Monero (XMR) antes de iniciar.");
+        log("[AVISO] Digite sua carteira XMR.");
         return;
     }
 
     start.disabled = true;
-    log(`[STATUS] Inicializando startMining com ${window.Module.numThreads || threadsOtimizadas} threads...`);
+    log(`[STATUS] Conectando pipeline com ${window.Module.numThreads || threadsOtimizadas} threads ativos...`);
 
     try {
         let result = window.Module.ccall(
@@ -147,14 +146,14 @@ start.onclick = () => {
         );
 
         if (result) {
-            log("[STATUS] minerando (Múltiplos workers em execução)");
+            log("[STATUS] Minerando!");
             stop.disabled = false;
         } else {
-            log("[STATUS] falha ao iniciar: a função startMining retornou false.");
+            log("[STATUS] A função startMining recusou a inicialização.");
             start.disabled = false;
         }
     } catch (e) {
-        log("[ERRO AO EXECUTAR] A função 'startMining' falhou: " + e.message);
+        log("[ERRO C++] Falha na ponte WebAssembly: " + e.message);
         start.disabled = false;
     }
 };
@@ -162,45 +161,11 @@ start.onclick = () => {
 stop.onclick = () => {
     try {
         window.Module.ccall("stopMining", null, [], []);
-        log("[STATUS] minerador parado.");
+        log("[STATUS] Minerador parado.");
         start.disabled = false;
         stop.disabled = true;
     } catch (e) {
         log("[ERR] Falha ao parar: " + e.message);
-    }
-};
-</script>
-
-</body>
-</html>
- = window.Module.ccall(
-            "startMining",
-            "boolean",
-            ["string", "string"],
-            [wallet, worker]
-        );
-
-        if (result) {
-            log("[STATUS] minerando (Múltiplas threads em execução!)");
-            stop.disabled = false;
-        } else {
-            log("[STATUS] falha ao iniciar: a função startMining retornou falso.");
-            start.disabled = false;
-        }
-    } catch (e) {
-        log("[ERRO AO EXECUTAR] A função 'startMining' falhou. Detalhes: " + e.message);
-        start.disabled = false;
-    }
-};
-
-stop.onclick = () => {
-    try {
-        window.Module.ccall("stopMining", null, [], []);
-        log("[STATUS] minerador parado com sucesso.");
-        start.disabled = false;
-        stop.disabled = true;
-    } catch (e) {
-        log("[ERR] Falha ao invocar stopMining: " + e.message);
     }
 };
 </script>
