@@ -7,31 +7,31 @@
 
 <style>
 body{
-    font-family:Arial, sans-serif;
-    background:#121212;
-    color:#eee;
-    padding:20px
+    font-family: Arial, sans-serif;
+    background: #121212;
+    color: #eee;
+    padding: 20px;
 }
 #log{
-    background:#000;
-    height:300px;
-    overflow:auto;
-    padding:10px;
-    white-space:pre-wrap;
+    background: #000;
+    height: 300px;
+    overflow: auto;
+    padding: 10px;
+    white-space: pre-wrap;
     font-family: monospace;
     border: 1px solid #333;
     margin-top: 10px;
 }
-input,button{
-    margin:4px;
-    padding:8px;
+input, button{
+    margin: 4px;
+    padding: 8px;
     background: #222;
     color: #fff;
     border: 1px solid #444;
     border-radius: 4px;
 }
 input{
-    width: 300px;
+    width: 280px;
 }
 button:disabled {
     background: #555;
@@ -62,34 +62,29 @@ button:not(:disabled) {
 <div id="log"></div>
 
 <script>
-// Função global de logs na tela
 const log = e => {
     document.getElementById("log").textContent += e + "\n";
     const logDiv = document.getElementById("log");
     logDiv.scrollTop = logDiv.scrollHeight;
 };
 
-// 1. Detecta núcleos lógicos e calcula o limite de cache para RandomX (Threads = Cores / 2)
+// 1. Configuração do ambiente com caminhos absolutos travados na Vercel
 const coresLogicas = navigator.hardwareConcurrency || 4;
 const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
 
 log(`[SISTEMA] Cores detectados: ${coresLogicas}. Solicitando ${threadsOtimizadas} threads.`);
 
-// Validar se os cabeçalhos do vercel.json ativaram o SharedArrayBuffer com sucesso
 if (typeof SharedArrayBuffer !== 'undefined') {
-    log(`[SISTEMA] SharedArrayBuffer validado com sucesso. Ambiente seguro para multi-threading.`);
+    log(`[SISTEMA] SharedArrayBuffer validado com sucesso.`);
 } else {
-    log(`[ERRO DE SEGURANÇA] SharedArrayBuffer não está disponível. Certifique-se de que o vercel.json está na raiz.`);
+    log(`[ERRO] SharedArrayBuffer bloqueado. Verifique o vercel.json.`);
 }
 
-// 2. Configura e corrige os limites de memória diretamente no escopo global do Emscripten
 window.Module = {
     numThreads: threadsOtimizadas,
-    // Ensina os Web Workers a acharem o arquivo principal na estrutura da Vercel
-    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
-    
-    // Força os limites corretos para evitar que o alocador do WASM aborte o script
-    INITIAL_MEMORY: 1073741824, 
+    // Garante que os Workers do celular busquem o arquivo correto na raiz da Vercel
+    mainScriptUrlOrBlob: '/bin/miner.js',
+    INITIAL_MEMORY: 1073741824,
     
     locateFile: function(path) {
         return '/bin/' + path;
@@ -101,32 +96,33 @@ window.Module = {
         log("[WASM LOG] " + text); 
     },
     onAbort: function(err) {
-        log("[CRÍTICO] O WebAssembly abortou a execução: " + err);
+        log("[CRÍTICO] WebAssembly abortado: " + err);
     },
     onRuntimeInitialized: function() {
-        log("[STATUS] pronto para minerar (Runtime Iniciado)");
+        log("[STATUS] pronto para minerar (Callback disparado)");
         document.getElementById("startBtn").disabled = false;
     }
 };
 </script>
 
-<!-- 3. Carrega o arquivo unificado vindo das GitHub Actions -->
-<script src="./bin/miner.js" 
-        onload="console.log('[SISTEMA] Script miner.js carregado em memória.');"
-        onerror="log('[ERRO CRÍTICO] Falha ao ler /bin/miner.js. Verifique se o arquivo está na pasta bin/ da Vercel.')">
+<!-- 2. Carregamento do script usando caminho absoluto na Vercel -->
+<script src="/bin/miner.js" 
+        onload="console.log('[SISTEMA] Script carregado.');"
+        onerror="log('[ERRO CRÍTICO] Falha ao ler /bin/miner.js. Verifique se o arquivo está na pasta bin/.')">
 </script>
 
 <script>
-// 4. Varre a memória secundária para ligar o botão caso o Runtime se autoinicie sem disparar o callback clássico
-setInterval(() => {
+// 3. Varredura contínua de memória para destravar o botão assim que o script for injetado
+const memoryCheck = setInterval(() => {
     const btn = document.getElementById("startBtn");
     if (btn.disabled && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
-        log("[SISTEMA] Varre-memória encontrou as funções nativas prontas. Liberando minerador.");
+        log("[SISTEMA] Varre-memória localizou as funções do minerador. Liberando botão!");
         btn.disabled = false;
+        clearInterval(memoryCheck);
     }
-}, 2000);
+}, 1500);
 
-// 5. Lógica de controle e execução das funções do Minerador
+// 4. Controles do Minerador
 const start = document.getElementById("startBtn");
 const stop = document.getElementById("stopBtn");
 
@@ -140,10 +136,9 @@ start.onclick = () => {
     }
 
     start.disabled = true;
-    log(`[STATUS] Executando startMining com ${window.Module.numThreads || threadsOtimizadas} threads...`);
+    log(`[STATUS] Inicializando startMining com ${window.Module.numThreads || threadsOtimizadas} threads...`);
 
     try {
-        // Invoca a ponte C++ compilada
         let result = window.Module.ccall(
             "startMining",
             "boolean",
@@ -152,14 +147,14 @@ start.onclick = () => {
         );
 
         if (result) {
-            log("[STATUS] minerando (Multi-workers rodando com sucesso!)");
+            log("[STATUS] minerando (Múltiplos workers em execução)");
             stop.disabled = false;
         } else {
-            log("[STATUS] falha ao iniciar: a função interna startMining retornou false.");
+            log("[STATUS] falha ao iniciar: a função startMining retornou false.");
             start.disabled = false;
         }
     } catch (e) {
-        log("[ERRO AO EXECUTAR] A função 'startMining' falhou. Detalhes: " + e.message);
+        log("[ERRO AO EXECUTAR] A função 'startMining' falhou: " + e.message);
         start.disabled = false;
     }
 };
@@ -171,143 +166,14 @@ stop.onclick = () => {
         start.disabled = false;
         stop.disabled = true;
     } catch (e) {
-        log("[ERR] Falha ao invocar stopMining: " + e.message);
+        log("[ERR] Falha ao parar: " + e.message);
     }
 };
 </script>
 
 </body>
 </html>
-    background: #555;
-    color: #aaa;
-    cursor: not-allowed;
-}
-button:not(:disabled) {
-    background: #f60;
-    cursor: pointer;
-    font-weight: bold;
-}
-#stopBtn:not(:disabled) {
-    background: #d32f2f;
-}
-</style>
-</head>
-
-<body>
-
-<h2>Monero WASM Miner (Multi-Thread)</h2>
-
-<input id="walletInput" placeholder="Carteira XMR" value=""><br>
-<input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
-
-<button id="startBtn" disabled>Iniciar</button>
-<button id="stopBtn" disabled>Parar</button>
-
-<div id="log"></div>
-
-<script>
-// Função global de logs na tela
-const log = e => {
-    document.getElementById("log").textContent += e + "\n";
-    const logDiv = document.getElementById("log");
-    logDiv.scrollTop = logDiv.scrollHeight;
-};
-
-// 1. Detecta núcleos lógicos e calcula o limite de cache para RandomX (Threads = Cores / 2)
-const coresLogicas = navigator.hardwareConcurrency || 4;
-const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
-
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Solicitando ${threadsOtimizadas} threads.`);
-
-// Validar se os cabeçalhos do vercel.json ativaram o SharedArrayBuffer com sucesso
-if (typeof SharedArrayBuffer !== 'undefined') {
-    log(`[SISTEMA] SharedArrayBuffer validado com sucesso. Ambiente seguro para multi-threading.`);
-} else {
-    log(`[ERRO DE SEGURANÇA] SharedArrayBuffer não está disponível. Certifique-se de que o vercel.json está na raiz.`);
-}
-
-// Configuração do ambiente injetada no escopo global antes do arquivo carregar
-const minerConfig = {
-    numThreads: threadsOtimizadas,
-    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
-    locateFile: function(path) {
-        return '/bin/' + path;
-    },
-    print: function(text) { 
-        log(text); 
-    },
-    printErr: function(text) { 
-        log("[WASM ERR] " + text); 
-    },
-    onRuntimeInitialized: function() {
-        log("[STATUS] pronto para minerar (Callback disparado)");
-        document.getElementById("startBtn").disabled = false;
-    }
-};
-
-window.Module = minerConfig;
-</script>
-
-<!-- 2. Carrega o arquivo unificado vindo das GitHub Actions -->
-<script src="./bin/miner.js" 
-        onload="console.log('[SISTEMA] Script miner.js baixado com sucesso.')"
-        onerror="log('[ERRO CRÍTICO] Falha ao carregar /bin/miner.js. Verifique se o arquivo existe na pasta.')">
-</script>
-
-<script>
-// 3. MOTOR DE INICIALIZAÇÃO ASSÍNCRONA 
-// Varre as variações de compilação do Emscripten para extrair a interface C++
-try {
-    if (typeof MoneroMiner === 'function') {
-        log("[SISTEMA] Detectada fábrica modular (MoneroMiner). Inicializando...");
-        MoneroMiner(minerConfig).then(function(instance) {
-            window.Module = instance;
-            log("[STATUS] pronto para minerar (Módulo carregado via Promise)");
-            document.getElementById("startBtn").disabled = false;
-        });
-    } else if (typeof Module === 'function') {
-        log("[SISTEMA] Detectada fábrica modular (Module). Inicializando...");
-        Module(minerConfig).then(function(instance) {
-            window.Module = instance;
-            log("[STATUS] pronto para minerar (Módulo carregado via Promise)");
-            document.getElementById("startBtn").disabled = false;
-        });
-    } else {
-        // Fallback: Varre a memória periodicamente para pegar o carregamento clássico
-        let checkCounter = 0;
-        const memoryCheck = setInterval(() => {
-            checkCounter++;
-            if (window.Module && (window.Module.ccall || window.Module._startMining || window.Module.asm)) {
-                log("[SISTEMA] Módulo detectado na memória global via varredura secundária.");
-                document.getElementById("startBtn").disabled = false;
-                clearInterval(memoryCheck);
-            }
-            if (checkCounter > 5) clearInterval(memoryCheck); // Para após 10 segundos
-        }, 2000);
-    }
-} catch (err) {
-    log("[ERRO INTEGRAL] Falha no mapeamento do binário: " + err.message);
-}
-
-// 4. Lógica de controle e execução das funções do Minerador
-const start = document.getElementById("startBtn");
-const stop = document.getElementById("stopBtn");
-
-start.onclick = () => {
-    let wallet = document.getElementById("walletInput").value.trim();
-    let worker = document.getElementById("workerInput").value.trim();
-
-    if (!wallet) {
-        log("[AVISO] Por favor, insira uma carteira Monero (XMR) antes de iniciar.");
-        return;
-    }
-
-    start.disabled = true;
-    log(`[STATUS] Executando startMining em segundo plano com ${window.Module.numThreads || threadsOtimizadas} threads...`);
-
-    try {
-        // Executa a ponte C++ do seu repositório original forkeado
-        let result = window.Module.ccall(
+ = window.Module.ccall(
             "startMining",
             "boolean",
             ["string", "string"],
