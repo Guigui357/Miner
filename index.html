@@ -1155,5 +1155,70 @@ log(
 
 </script>
 
+<script>
+const walletInput = document.getElementById("walletInput");
+const applyWallet = document.getElementById("applyWallet");
+const walletStatus = document.getElementById("walletStatus");
+
+applyWallet.addEventListener("click", () => {
+
+    const wallet = walletInput.value.trim();
+
+    if (!wallet) {
+        walletStatus.textContent =
+            "Digite um endereço Monero.";
+        return;
+    }
+
+    if (typeof Module === "undefined") {
+        walletStatus.textContent =
+            "WASM ainda não foi inicializado.";
+        return;
+    }
+
+    if (typeof Module.ccall !== "function") {
+        walletStatus.textContent =
+            "Module.ccall ainda não está disponível.";
+        return;
+    }
+
+    try {
+
+        const result = Module.ccall(
+            "setWalletFromWeb",
+            "number",
+            ["string"],
+            [wallet]
+        );
+
+        if (result === 1) {
+
+            walletStatus.textContent =
+                "Carteira configurada. Agora você pode iniciar a mineração.";
+
+            console.log(
+                "[WALLET] Carteira configurada no WASM."
+            );
+
+        } else {
+
+            walletStatus.textContent =
+                "Endereço inválido. Use um endereço Monero mainnet de 95 caracteres começando com 4 ou 8.";
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            "[WALLET] Erro ao configurar carteira:",
+            error
+        );
+
+        walletStatus.textContent =
+            "Erro ao configurar a carteira no WASM.";
+    }
+});
+</script>
+
 </body>
 </html>
