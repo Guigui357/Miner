@@ -1,401 +1,1140 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Monero WASM Miner</title>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
 
-<style>
-body{
-    font-family: Arial, sans-serif;
-    background: #121212;
-    color: #eee;
-    padding: 20px;
-}
-#log{
-    background: #000;
-    height: 300px;
-    overflow: auto;
-    padding: 10px;
-    white-space: pre-wrap;
-    font-family: monospace;
-    border: 1px solid #333;
-    margin-top: 10px;
-}
-input, button{
-    margin: 4px;
-    padding: 8px;
-    background: #222;
-    color: #fff;
-    border: 1px solid #444;
-    border-radius: 4px;
-}
-input{
-    width: 280px;
-}
-button:disabled {
-    background: #555;
-    color: #aaa;
-    cursor: not-allowed;
-}
-button:not(:disabled) {
-    background: #f60;
-    cursor: pointer;
-    font-weight: bold;
-}
-#stopBtn:not(:disabled) {
-    background: #d32f2f;
-}
-</style>
+    <title>MoneroMiner WASM</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            background: #111;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Roboto, Arial, sans-serif;
+        }
+
+        body {
+            padding: 16px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 25px;
+        }
+
+        .subtitle {
+            margin-bottom: 18px;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .panel {
+            background: #1b1b1b;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 14px;
+        }
+
+        .status {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .status-box {
+            background: #121212;
+            border: 1px solid #292929;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .label {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .value {
+            font-size: 16px;
+            word-break: break-word;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: 0;
+            border-radius: 8px;
+            padding: 12px 18px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            background: #333;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        #startBtn {
+            background: #198754;
+        }
+
+        #stopBtn {
+            background: #dc3545;
+        }
+
+        #log {
+            width: 100%;
+            height: 420px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+
+            background: #050505;
+            border: 1px solid #292929;
+            border-radius: 8px;
+
+            padding: 12px;
+
+            font-family:
+                ui-monospace,
+                SFMono-Regular,
+                Menlo,
+                Monaco,
+                Consolas,
+                "Liberation Mono",
+                monospace;
+
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .warning {
+            color: #ffcc66;
+        }
+
+        .success {
+            color: #66dd88;
+        }
+
+        .error {
+            color: #ff6666;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .status {
+                grid-template-columns: 1fr;
+            }
+
+            #log {
+                height: 360px;
+                font-size: 11px;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-<h2>Monero WASM Miner (Multi-Thread)</h2>
+<div class="container">
 
-<input id="walletInput" placeholder="Carteira XMR" value=""><br>
-<input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
+    <h1>MoneroMiner WASM</h1>
 
-<button id="startBtn" disabled>Iniciar</button>
-<button id="stopBtn" disabled>Parar</button>
+    <div class="subtitle">
+        RandomX + Emscripten + WasmJit
+    </div>
 
-<div id="log"></div>
+    <div class="panel">
+
+        <div class="status">
+
+            <div class="status-box">
+                <div class="label">CPU threads</div>
+                <div class="value" id="threads">detectando...</div>
+            </div>
+
+            <div class="status-box">
+                <div class="label">Emscripten</div>
+                <div class="value" id="emscriptenStatus">
+                    aguardando...
+                </div>
+            </div>
+
+            <div class="status-box">
+                <div class="label">Miner</div>
+                <div class="value" id="minerStatus">
+                    parado
+                </div>
+            </div>
+
+            <div class="status-box">
+                <div class="label">WasmJit</div>
+                <div class="value" id="jitStatus">
+                    aguardando...
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <div class="buttons">
+
+            <button
+                id="startBtn"
+                disabled
+            >
+                Iniciar mineração
+            </button>
+
+            <button
+                id="stopBtn"
+                disabled
+            >
+                Parar mineração
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <div class="label">Console</div>
+
+        <div id="log"></div>
+
+    </div>
+
+</div>
+
 
 <script>
-const log = e => {
-    document.getElementById("log").textContent += e + "\n";
-    const logDiv = document.getElementById("log");
-    logDiv.scrollTop = logDiv.scrollHeight;
-};
+"use strict";
 
-const coresLogicas = navigator.hardwareConcurrency || 4;
-const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
+/*
+ * ============================================================
+ * MONEROMINER WASM - FRONTEND
+ * ============================================================
+ */
 
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
+const logElement = document.getElementById("log");
 
-// Interceptador e Patch de Memória Compartilhada para o Android
-const originalWasmMemory = WebAssembly.Memory;
-WebAssembly.Memory = function(opts) {
-    log("[PATCH] Alocação de memória do WebAssembly autorizada.");
-    if (opts) {
-        opts.initial = 16384; // 1024 MB exigidos pelo binário
-        if (!opts.maximum) opts.maximum = 32768;
-        opts.shared = true;
-    }
-    return new originalWasmMemory(opts);
-};
+const startButton = document.getElementById("startBtn");
+const stopButton = document.getElementById("stopBtn");
 
-// Objeto de configuração global limpo
-const minerConfig = {
-    numThreads: threadsOtimizadas,
-    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
-    INITIAL_MEMORY: 1073741824,
-    locateFile: function(path) { return '/bin/' + path; },
-    print: function(text) { log(text); },
-    printErr: function(text) { log("[WASM LOG] " + text); },
-    onAbort: function(err) { log("[CRÍTICO] Abortado: " + err); }
-};
+const threadsElement =
+    document.getElementById("threads");
 
-window.Module = minerConfig;
-</script>
+const emscriptenStatusElement =
+    document.getElementById("emscriptenStatus");
 
-<!-- Carrega o script unificado -->
-<script src="/bin/miner.js" 
-        onload="log('[SISTEMA] Script carregado na página. Tentando vincular a interface C++...')"
-        onerror="log('[ERRO] Falha ao carregar /bin/miner.js')">
-</script>
+const minerStatusElement =
+    document.getElementById("minerStatus");
 
-<script>
-// ACIONADOR ASSÍNCRONO ULTRA-AGRESSIVO
-// Se o Emscripten empacotou o minerador como um construtor global de Módulo, 
-// o código abaixo força a execução dele passando os parâmetros corretos.
-setTimeout(() => {
-    try {
-        // Testa se o compilador exportou uma função de inicialização assíncrona (Padrão moderno)
-        if (typeof MoneroMiner === 'function') {
-            log("[SISTEMA] Inicializando via fábrica 'MoneroMiner'...");
-            MoneroMiner(window.Module).then(function(instance) {
-                window.Module = instance;
-                log("[STATUS] Pronto para minerar!");
-                document.getElementById("startBtn").disabled = false;
-            });
-        } else if (typeof Module === 'function') {
-            log("[SISTEMA] Inicializando via fábrica 'Module'...");
-            Module(window.Module).then(function(instance) {
-                window.Module = instance;
-                log("[STATUS] Pronto para minerar!");
-                document.getElementById("startBtn").disabled = false;
-            });
-        } else if (window.Module && (window.Module.ccall || window.Module._startMining)) {
-            // Se já inicializou sozinho em modo linear clássico
-            log("[SISTEMA] Interface clássica detectada.");
-            log("[STATUS] Pronto para minerar!");
-            document.getElementById("startBtn").disabled = false;
-        } else {
-            log("[Aviso] Tentando liberação de emergência da interface de controle...");
-            // Força a ativação para testes manuais mesmo que o callback padrão tenha demorado
-            document.getElementById("startBtn").disabled = false;
-        }
-    } catch (e) {
-        log("[ERRO VINCULAÇÃO] " + e.message);
-        document.getElementById("startBtn").disabled = false; // Garante o botão ativo em caso de exceção de escopo
-    }
-}, 3000);
+const jitStatusElement =
+    document.getElementById("jitStatus");
 
-// Controles do Minerador
-const start = document.getElementById("startBtn");
-const stop = document.getElementById("stopBtn");
 
-start.onclick = () => {
-    let wallet = document.getElementById("walletInput").value.trim();
-    let worker = document.getElementById("workerInput").value.trim();
+/*
+ * ============================================================
+ * LOG
+ * ============================================================
+ */
 
-    if (!wallet) {
-        log("[AVISO] Por favor, digite sua carteira XMR.");
+function log(message) {
+
+    const text = String(message);
+
+    console.log(text);
+
+    if (!logElement) {
         return;
     }
 
-    start.disabled = true;
-    log(`[STATUS] Invocando 'startMining' com ${window.Module.numThreads || threadsOtimizadas} threads...`);
+    logElement.textContent += text + "\n";
 
-    try {
-        // Tenta executar via chamada clássica do Emscripten
-        let result = false;
-        
-        if (window.Module.ccall) {
-            result = window.Module.ccall(
-                "startMining",
-                "boolean",
-                ["string", "string"],
-                [wallet, worker]
-            );
-        } else if (window.Module._startMining) {
-            // Fallback caso a função tenha sido exportada de forma direta sem o wrapper ccall
-            // Converte strings do JS em ponteiros C++ para o minerador aceitar direto
-            const ptrWallet = window.Module.allocateUTF8 ? window.Module.allocateUTF8(wallet) : 0;
-            const ptrWorker = window.Module.allocateUTF8 ? window.Module.allocateUTF8(worker) : 0;
-            result = window.Module._startMining(ptrWallet, ptrWorker);
-        } else {
-            throw new Error("Nenhum ponto de entrada C++ ('startMining') foi localizado no arquivo miner.js.");
-        }
-
-        if (result) {
-            log("[STATUS] Minerando com sucesso!");
-            stop.disabled = false;
-        } else {
-            log("[STATUS] O minerador nativo recusou a inicialização (startMining retornou false).");
-            start.disabled = false;
-        }
-    } catch (e) {
-        log("[ERRO DE INTERFACE] Não foi possível chamar a mineração. Detalhes: " + e.message);
-        start.disabled = false;
-    }
-};
-
-stop.onclick = () => {
-    try {
-        if (window.Module.ccall) {
-            window.Module.ccall("stopMining", null, [], []);
-        } else if (window.Module._stopMining) {
-            window.Module._stopMining();
-        }
-        log("[STATUS] Minerador parado.");
-        start.disabled = false;
-        stop.disabled = true;
-    } catch (e) {
-        log("[ERR] Falha ao parar: " + e.message);
-    }
-};
-</script>
-
-</body>
-</html>
-    background: #555;
-    color: #aaa;
-    cursor: not-allowed;
+    logElement.scrollTop =
+        logElement.scrollHeight;
 }
-button:not(:disabled) {
-    background: #f60;
-    cursor: pointer;
-    font-weight: bold;
-}
-#stopBtn:not(:disabled) {
-    background: #d32f2f;
-}
-</style>
-</head>
 
-<body>
 
-<h2>Monero WASM Miner (Multi-Thread)</h2>
+/*
+ * ============================================================
+ * ERROS GLOBAIS
+ * ============================================================
+ */
 
-<input id="walletInput" placeholder="Carteira XMR" value=""><br>
-<input id="workerInput" value="WasmMinerHtml" placeholder="Worker"><br>
+window.addEventListener("error", function(event) {
 
-<button id="startBtn" disabled>Iniciar</button>
-<button id="stopBtn" disabled>Parar</button>
+    log(
+        "[JS-ERROR] " +
+        (event.message || "Erro JavaScript")
+    );
 
-<div id="log"></div>
-
-<script>
-const log = e => {
-    document.getElementById("log").textContent += e + "\n";
-    const logDiv = document.getElementById("log");
-    logDiv.scrollTop = logDiv.scrollHeight;
-};
-
-const coresLogicas = navigator.hardwareConcurrency || 4;
-const threadsOtimizadas = Math.max(1, Math.floor(coresLogicas / 2));
-
-log(`[SISTEMA] Cores detectados: ${coresLogicas}. Preparando ${threadsOtimizadas} threads.`);
-
-// --- NOVO PATCH DE MEMÓRIA AJUSTADO PARA AS EXIGÊNCIAS DO ARQUIVO ---
-const originalWasmMemory = WebAssembly.Memory;
-WebAssembly.Memory = function(opts) {
-    log("[PATCH] Capturada tentativa de alocação de memória compartilhada.");
-    if (opts) {
-        log(`[PATCH] Alocação original solicitada: ${opts.initial} páginas (${(opts.initial * 65536 / 1024 / 1024).toFixed(0)} MB).`);
-        
-        // Forçamos o valor exato exigido pelo binário (16384 páginas = 1GB), 
-        // mas garantindo as propriedades máximas para satisfazer o validador
-        opts.initial = 16384; 
-        if (!opts.maximum) {
-            opts.maximum = 32768; // 2GB máximo tolerado
-        }
-        opts.shared = true;
+    if (event.filename) {
+        log(
+            "[JS-ERROR] arquivo: " +
+            event.filename
+        );
     }
-    return new originalWasmMemory(opts);
-};
+
+    if (event.lineno) {
+        log(
+            "[JS-ERROR] linha: " +
+            event.lineno
+        );
+    }
+});
+
+
+window.addEventListener(
+    "unhandledrejection",
+    function(event) {
+
+        log(
+            "[PROMISE-ERROR] " +
+            String(event.reason)
+        );
+    }
+);
+
+
+/*
+ * ============================================================
+ * THREADS
+ * ============================================================
+ */
+
+const hardwareThreads =
+    navigator.hardwareConcurrency || 4;
+
+
+/*
+ * Não usar todos os cores no navegador.
+ *
+ * Isso evita deixar o dispositivo completamente travado.
+ */
+
+const threadsOtimizadas =
+    Math.max(
+        1,
+        Math.floor(hardwareThreads / 2)
+    );
+
+
+threadsElement.textContent =
+    hardwareThreads +
+    " detectados / " +
+    threadsOtimizadas +
+    " selecionados";
+
+
+log(
+    "[SISTEMA] CPU threads: " +
+    hardwareThreads
+);
+
+log(
+    "[SISTEMA] Threads selecionados: " +
+    threadsOtimizadas
+);
+
+
+/*
+ * ============================================================
+ * CONFIGURAÇÃO EMSCRIPTEN
+ * ============================================================
+ *
+ * IMPORTANTE:
+ *
+ * NÃO fazemos:
+ *
+ *   WebAssembly.Memory = ...
+ *
+ * NÃO forçamos:
+ *
+ *   1 GB
+ *   2 GB
+ *   shared memory manual
+ *
+ * O próprio Emscripten deve criar e administrar
+ * a memória do módulo.
+ *
+ * Isso é especialmente importante no iOS/WebKit.
+ * ============================================================
+ */
+
 
 window.Module = {
+
+    /*
+     * Pthreads/Emscripten
+     */
+
     numThreads: threadsOtimizadas,
-    mainScriptUrlOrBlob: window.location.origin + '/bin/miner.js',
-    INITIAL_MEMORY: 1073741824, // Sincroniza com as 16384 páginas (1 GB)
-    
+
+
+    /*
+     * Onde estão os arquivos gerados pelo Emscripten.
+     */
+
     locateFile: function(path) {
-        return '/bin/' + path;
+
+        return "/bin/" + path;
     },
-    print: function(text) { 
-        log(text); 
+
+
+    /*
+     * stdout
+     */
+
+    print: function(text) {
+
+        log("[WASM] " + text);
     },
-    printErr: function(text) { 
-        log("[WASM LOG] " + text); 
+
+
+    /*
+     * stderr
+     */
+
+    printErr: function(text) {
+
+        log("[WASM-ERR] " + text);
     },
-    onAbort: function(err) {
-        log("[CRÍTICO] Inicialização abortada: " + err);
+
+
+    /*
+     * Abort do Emscripten.
+     */
+
+    onAbort: function(reason) {
+
+        log(
+            "[ABORT] " +
+            String(reason)
+        );
+
+        minerStatusElement.textContent =
+            "abortado";
+
+        startButton.disabled = true;
+        stopButton.disabled = true;
     },
+
+
+    /*
+     * Chamado quando o runtime Emscripten terminou
+     * de inicializar.
+     */
+
     onRuntimeInitialized: function() {
-        log("[STATUS] Pronto para minerar (Callback nativo disparado)");
-        document.getElementById("startBtn").disabled = false;
+
+        log(
+            "[STATUS] Emscripten inicializado."
+        );
+
+        emscriptenStatusElement.textContent =
+            "inicializado";
+
+
+        /*
+         * Verificar APIs disponíveis.
+         */
+
+        if (
+            typeof Module.ccall ===
+            "function"
+        ) {
+
+            log(
+                "[STATUS] Module.ccall disponível."
+            );
+
+        } else {
+
+            log(
+                "[STATUS] Module.ccall não disponível."
+            );
+        }
+
+
+        /*
+         * Procurar exports reais.
+         *
+         * Não assumimos que _startMining existe.
+         */
+
+        const exportsEncontrados = [];
+
+
+        for (
+            const key in Module
+        ) {
+
+            if (
+                key.startsWith("_")
+            ) {
+
+                exportsEncontrados.push(key);
+            }
+        }
+
+
+        if (
+            exportsEncontrados.length > 0
+        ) {
+
+            log(
+                "[EXPORTS] " +
+                exportsEncontrados.join(", ")
+            );
+
+        } else {
+
+            log(
+                "[EXPORTS] Nenhum export _* encontrado."
+            );
+        }
+
+
+        /*
+         * Verificar especificamente o startMining.
+         */
+
+        if (
+            typeof Module._startMining ===
+            "function"
+        ) {
+
+            log(
+                "[STATUS] Module._startMining encontrado."
+            );
+
+            startButton.disabled = false;
+
+        } else {
+
+            log(
+                "[STATUS] Module._startMining não encontrado."
+            );
+
+
+            /*
+             * Caso o projeto use ccall com função
+             * exportada de outra maneira.
+             */
+
+            if (
+                typeof Module.ccall ===
+                "function"
+            ) {
+
+                startButton.disabled = false;
+
+            } else {
+
+                log(
+                    "[AVISO] Nenhum método conhecido para iniciar o miner."
+                );
+            }
+        }
     }
 };
+
+
+/*
+ * ============================================================
+ * START MINING
+ * ============================================================
+ */
+
+function startMining() {
+
+    log(
+        "[MINER] Solicitação para iniciar mineração..."
+    );
+
+
+    /*
+     * Primeiro tenta o export direto.
+     */
+
+    if (
+        typeof Module._startMining ===
+        "function"
+    ) {
+
+        log(
+            "[MINER] Chamando Module._startMining()..."
+        );
+
+        try {
+
+            Module._startMining();
+
+            minerStatusElement.textContent =
+                "minerando";
+
+            startButton.disabled = true;
+            stopButton.disabled = false;
+
+            return;
+
+        } catch (error) {
+
+            log(
+                "[MINER-ERROR] _startMining(): " +
+                String(error)
+            );
+        }
+    }
+
+
+    /*
+     * Depois tenta ccall.
+     */
+
+    if (
+        typeof Module.ccall ===
+        "function"
+    ) {
+
+        const possibleNames = [
+            "startMining",
+            "start_mining",
+            "start"
+        ];
+
+
+        for (
+            const name of possibleNames
+        ) {
+
+            try {
+
+                log(
+                    "[MINER] Tentando ccall('" +
+                    name +
+                    "')..."
+                );
+
+                Module.ccall(
+                    name,
+                    null,
+                    [],
+                    []
+                );
+
+                log(
+                    "[MINER] ccall('" +
+                    name +
+                    "') executado."
+                );
+
+                minerStatusElement.textContent =
+                    "minerando";
+
+                startButton.disabled = true;
+                stopButton.disabled = false;
+
+                return;
+
+            } catch (error) {
+
+                log(
+                    "[MINER] '" +
+                    name +
+                    "' não disponível: " +
+                    String(error)
+                );
+            }
+        }
+    }
+
+
+    log(
+        "[ERRO] Não foi encontrado um método de inicialização do miner."
+    );
+}
+
+
+/*
+ * ============================================================
+ * STOP MINING
+ * ============================================================
+ */
+
+function stopMining() {
+
+    log(
+        "[MINER] Solicitação para parar mineração..."
+    );
+
+
+    /*
+     * Export direto.
+     */
+
+    const directStops = [
+        "_stopMining",
+        "__stopMining",
+        "_stop_mining",
+        "_stop"
+    ];
+
+
+    for (
+        const name of directStops
+    ) {
+
+        if (
+            typeof Module[name] ===
+            "function"
+        ) {
+
+            try {
+
+                log(
+                    "[MINER] Chamando " +
+                    name +
+                    "()..."
+                );
+
+                Module[name]();
+
+                minerStatusElement.textContent =
+                    "parado";
+
+                startButton.disabled = false;
+                stopButton.disabled = true;
+
+                return;
+
+            } catch (error) {
+
+                log(
+                    "[MINER-ERROR] " +
+                    name +
+                    ": " +
+                    String(error)
+                );
+            }
+        }
+    }
+
+
+    /*
+     * ccall.
+     */
+
+    if (
+        typeof Module.ccall ===
+        "function"
+    ) {
+
+        const possibleNames = [
+            "stopMining",
+            "stop_mining",
+            "stop"
+        ];
+
+
+        for (
+            const name of possibleNames
+        ) {
+
+            try {
+
+                Module.ccall(
+                    name,
+                    null,
+                    [],
+                    []
+                );
+
+                log(
+                    "[MINER] ccall('" +
+                    name +
+                    "') executado."
+                );
+
+                minerStatusElement.textContent =
+                    "parado";
+
+                startButton.disabled = false;
+                stopButton.disabled = true;
+
+                return;
+
+            } catch (error) {
+
+                log(
+                    "[MINER] stop '" +
+                    name +
+                    "' não disponível."
+                );
+            }
+        }
+    }
+
+
+    log(
+        "[AVISO] Nenhum método de parada encontrado."
+    );
+}
+
+
+/*
+ * ============================================================
+ * BOTÕES
+ * ============================================================
+ */
+
+startButton.addEventListener(
+    "click",
+    startMining
+);
+
+
+stopButton.addEventListener(
+    "click",
+    stopMining
+);
+
+
+/*
+ * ============================================================
+ * MONITOR DO WASMJIT
+ * ============================================================
+ *
+ * O C++ imprime:
+ *
+ * [WASM-JIT] Compilando WebAssembly.Module...
+ * [WASM-JIT] WebAssembly.Module = OK
+ * [WASM-JIT] WebAssembly.Instance = OK; rx_jit = ACTIVE
+ * [WASM-JIT] execucoes=1
+ *
+ * Aqui apenas detectamos essas mensagens para atualizar
+ * o indicador visual.
+ * ============================================================
+ */
+
+const originalPrint =
+    window.Module.print;
+
+
+window.Module.print =
+    function(text) {
+
+        const message =
+            String(text);
+
+
+        /*
+         * JIT compilando
+         */
+
+        if (
+            message.includes(
+                "[WASM-JIT] Compilando"
+            )
+        ) {
+
+            jitStatusElement.textContent =
+                "compilando";
+        }
+
+
+        /*
+         * Module criado
+         */
+
+        if (
+            message.includes(
+                "[WASM-JIT] WebAssembly.Module = OK"
+            )
+        ) {
+
+            jitStatusElement.textContent =
+                "Module OK";
+        }
+
+
+        /*
+         * Instance + rx_jit
+         */
+
+        if (
+            message.includes(
+                "rx_jit = ACTIVE"
+            )
+        ) {
+
+            jitStatusElement.textContent =
+                "ATIVO";
+
+            jitStatusElement.className =
+                "value success";
+        }
+
+
+        /*
+         * Execução
+         */
+
+        if (
+            message.includes(
+                "[WASM-JIT] execucoes="
+            )
+        ) {
+
+            jitStatusElement.textContent =
+                "EXECUTANDO";
+
+            jitStatusElement.className =
+                "value success";
+        }
+
+
+        /*
+         * Erro JIT
+         */
+
+        if (
+            message.includes(
+                "[WASM-JIT] runtime error"
+            )
+        ) {
+
+            jitStatusElement.textContent =
+                "ERRO";
+
+            jitStatusElement.className =
+                "value error";
+        }
+
+
+        /*
+         * Imprime normalmente.
+         */
+
+        if (
+            typeof originalPrint ===
+            "function"
+        ) {
+
+            originalPrint.call(
+                window.Module,
+                message
+            );
+
+        } else {
+
+            log(
+                "[WASM] " +
+                message
+            );
+        }
+    };
+
+
+/*
+ * ============================================================
+ * CARREGAMENTO
+ * ============================================================
+ */
+
+log(
+    "[SISTEMA] MoneroMiner WASM"
+);
+
+log(
+    "[SISTEMA] Carregando /bin/miner.js..."
+);
+
+
+/*
+ * Não coloque outro <script src="miner.js">
+ * em outro lugar da página.
+ */
+
 </script>
 
-<!-- Carrega o script principal -->
-<script src="/bin/miner.js" 
-        onload="log('[SISTEMA] Binário miner.js carregado com sucesso pelo navegador.')"
-        onerror="log('[ERRO] Arquivo miner.js não foi encontrado em /bin/miner.js')">
-</script>
+
+<script
+    src="/bin/miner.js"
+    onload="
+        log('[SISTEMA] /bin/miner.js carregado.');
+    "
+    onerror="
+        log('[ERRO] Falha ao carregar /bin/miner.js.');
+        minerStatusElement.textContent = 'erro';
+    "
+></script>
+
 
 <script>
-// Substitua o bloco de scripts final por este:
+/*
+ * ============================================================
+ * PÓS-CARREGAMENTO
+ * ============================================================
+ */
 
-const start = document.getElementById("startBtn");
-const stop = document.getElementById("stopBtn");
+setTimeout(function() {
 
-start.onclick = () => {
-    let wallet = document.getElementById("walletInput").value.trim();
-    let worker = document.getElementById("workerInput").value.trim();
+    log(
+        "[DEBUG] Verificando runtime..."
+    );
 
-    if (!wallet) {
-        log("[AVISO] Por favor, digite sua carteira XMR.");
+
+    if (
+        typeof Module ===
+        "undefined"
+    ) {
+
+        log(
+            "[ERRO] Module não existe."
+        );
+
         return;
     }
 
-    start.disabled = true;
-    log(`[STATUS] Procurando função de mineração correspondente em memória...`);
 
-    // RASTREADOR DE FUNÇÕES: Varre o objeto Module em busca de qualquer menção a "mining" ou "start"
-    let funcoesEncontradas = [];
-    if (window.Module) {
-        for (let prop in window.Module) {
-            if (prop.toLowerCase().includes("min") || prop.toLowerCase().includes("start")) {
-                funcoesEncontradas.push(prop);
-            }
+    log(
+        "[DEBUG] Module existe."
+    );
+
+
+    if (
+        Module.wasmMemory
+    ) {
+
+        log(
+            "[DEBUG] Module.wasmMemory disponível."
+        );
+
+        try {
+
+            log(
+                "[DEBUG] Memória WASM atual: " +
+                Module.wasmMemory.buffer.byteLength +
+                " bytes"
+            );
+
+        } catch (error) {
+
+            log(
+                "[DEBUG] Não foi possível ler o tamanho da memória."
+            );
         }
-    }
-    
-    if (funcoesEncontradas.length > 0) {
-        log(`[RASTREADOR] Funções nativas detectadas: [${funcoesEncontradas.join(", ")}]`);
+
     } else {
-        log(`[RASTREADOR] Nenhuma função óbvia encontrada com 'min' ou 'start'.`);
+
+        log(
+            "[DEBUG] Module.wasmMemory ainda não disponível."
+        );
     }
 
-    try {
-        let result = false;
-        
-        // 1. Tenta variações de nomes comuns gerados pelo compilador do MoneroMiner
-        if (window.Module.ccall) {
-            // Tenta as três variações mais comuns de exportação de string do Emscripten
-            const funcoesParaTestar = ["startMining", "start_mining", "start"];
-            for (let func of funcoesParaTestar) {
-                try {
-                    result = window.Module.ccall(func, "boolean", ["string", "string"], [wallet, worker]);
-                    if (result) { log(`[SISTEMA] Conectado via ccall("${func}")!`); break; }
-                } catch(e) {}
-            }
-        }
-        
-        // 2. Tenta execução direta pelos ponteiros do C++ (Caso o ccall tenha sido removido na otimização -O3)
-        if (!result) {
-            const ptrWallet = window.Module.allocateUTF8 ? window.Module.allocateUTF8(wallet) : 0;
-            const ptrWorker = window.Module.allocateUTF8 ? window.Module.allocateUTF8(worker) : 0;
-            
-            // Varre as variações diretas de sublinhado do compilador do Linux/Actions
-            const metodosDiretos = ["_startMining", "__startMining", "_start_mining", "_start"];
-            for (let metodo of metodosDiretos) {
-                if (typeof window.Module[metodo] === 'function') {
-                    log(`[SISTEMA] Tentando execução direta via window.Module.${metodo}...`);
-                    result = window.Module[metodo](ptrWallet, ptrWorker);
-                    if (result || result === undefined) { 
-                        result = true; 
-                        log(`[STATUS] Invocado com sucesso via ${metodo}!`);
-                        break; 
-                    }
-                }
-            }
-        }
 
-        if (result) {
-            log("[STATUS] Minerador inicializado com sucesso (Multi-threads ativas)!");
-            stop.disabled = false;
-        } else {
-            throw new Error("O ponto de entrada C++ não respondeu a nenhum dos formatos de teste padrão.");
-        }
-    } catch (e) {
-        log("[ERRO DE INTERFACE] " + e.message);
-        start.disabled = false;
-    }
-};
+    if (
+        typeof Module.ccall ===
+        "function"
+    ) {
 
-stop.onclick = () => {
-    try {
-        const paradas = ["stopMining", "stop_mining", "stop", "_stopMining", "_stop_mining"];
-        for (let p of paradas) {
-            if (window.Module.ccall) {
-                try { window.Module.ccall(p, null, [], []); } catch(e) {}
-            }
-            if (typeof window.Module[p] === 'function') {
-                try { window.Module[p](); } catch(e) {}
-            }
-        }
-        log("[STATUS] Comando de parada enviado.");
-        start.disabled = false;
-        stop.disabled = true;
-    } catch (e) {
-        log("[ERR] Falha ao parar: " + e.message);
+        log(
+            "[DEBUG] Module.ccall = disponível."
+        );
     }
-};
+
+
+    if (
+        typeof Module._startMining ===
+        "function"
+    ) {
+
+        log(
+            "[DEBUG] _startMining = disponível."
+        );
+
+        startButton.disabled = false;
+    }
+
+
+}, 3000);
+
+
+/*
+ * ============================================================
+ * DETECTOR DE JIT
+ * ============================================================
+ *
+ * Isso não executa o JIT.
+ *
+ * Apenas mostra no console do navegador se as mensagens
+ * do WasmJit aparecerem.
+ *
+ * O JIT real é chamado pelo:
+ *
+ * RandomX/src/vm_interpreted.cpp
+ *
+ * através de:
+ *
+ * wasmJit.compile(program)
+ *
+ * e:
+ *
+ * wasmJit.execute(...)
+ *
+ * ============================================================
+ */
+
+log(
+    "[WASM-JIT] Monitor preparado."
+);
+
+log(
+    "[WASM-JIT] Aguardando execução do RandomX..."
+);
+
 </script>
+
 </body>
 </html>
