@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -7,261 +8,388 @@
         content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
 
-    <title>MoneroMiner WASM</title>
+```
+<title>MoneroMiner WASM</title>
 
-    <style>
-        * {
-            box-sizing: border-box;
-        }
+<style>
+    * {
+        box-sizing: border-box;
+    }
 
-        html,
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background: #111;
+        color: #eee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                     Roboto, Arial, sans-serif;
+    }
+
+    body {
+        padding: 16px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    h1 {
+        margin: 0 0 8px;
+        font-size: 25px;
+    }
+
+    .subtitle {
+        margin-bottom: 18px;
+        color: #aaa;
+        font-size: 14px;
+    }
+
+    .panel {
+        background: #1b1b1b;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 14px;
+    }
+
+    .status {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .status-box {
+        background: #121212;
+        border: 1px solid #292929;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .label {
+        color: #888;
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .value {
+        font-size: 16px;
+        word-break: break-word;
+    }
+
+    .buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    button {
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 18px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #333;
+        color: white;
+    }
+
+    button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    #startBtn {
+        background: #198754;
+    }
+
+    #stopBtn {
+        background: #dc3545;
+    }
+
+    #log {
+        width: 100%;
+        height: 420px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+
+        background: #050505;
+        border: 1px solid #292929;
+        border-radius: 8px;
+
+        padding: 12px;
+
+        font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            "Liberation Mono",
+            monospace;
+
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .warning {
+        color: #ffcc66;
+    }
+
+    .success {
+        color: #66dd88;
+    }
+
+    .error {
+        color: #ff6666;
+    }
+
+    .wallet-box {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto 16px;
+        background: #1b1b1b;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 15px;
+    }
+
+    .wallet-box label {
+        display: block;
+        color: #aaa;
+        font-size: 13px;
+        margin-bottom: 7px;
+    }
+
+    .wallet-box input {
+        width: 100%;
+        border: 1px solid #444;
+        border-radius: 8px;
+        background: #101010;
+        color: #eee;
+        padding: 12px;
+        font-size: 14px;
+        outline: none;
+        margin-bottom: 10px;
+    }
+
+    .wallet-box input:focus {
+        border-color: #666;
+    }
+
+    .wallet-box button {
+        width: 100%;
+    }
+
+    #walletStatus {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #aaa;
+        word-break: break-word;
+    }
+
+    .worker-box {
+        width: 100%;
+        max-width: 900px;
+        margin: 0 auto 16px;
+        background: #1b1b1b;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 15px;
+    }
+
+    .worker-box label {
+        display: block;
+        color: #aaa;
+        font-size: 13px;
+        margin-bottom: 7px;
+    }
+
+    .worker-box input {
+        width: 100%;
+        border: 1px solid #444;
+        border-radius: 8px;
+        background: #101010;
+        color: #eee;
+        padding: 12px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    .worker-box input:focus {
+        border-color: #666;
+    }
+
+    #workerStatus {
+        margin-top: 8px;
+        color: #777;
+        font-size: 12px;
+        word-break: break-word;
+    }
+
+    @media (max-width: 600px) {
         body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            min-height: 100%;
-            background: #111;
-            color: #eee;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                         Roboto, Arial, sans-serif;
-        }
-
-        body {
-            padding: 16px;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            margin: 0 0 8px;
-            font-size: 25px;
-        }
-
-        .subtitle {
-            margin-bottom: 18px;
-            color: #aaa;
-            font-size: 14px;
-        }
-
-        .panel {
-            background: #1b1b1b;
-            border: 1px solid #333;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 14px;
+            padding: 10px;
         }
 
         .status {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .status-box {
-            background: #121212;
-            border: 1px solid #292929;
-            border-radius: 8px;
-            padding: 12px;
-        }
-
-        .label {
-            color: #888;
-            font-size: 12px;
-            margin-bottom: 4px;
-        }
-
-        .value {
-            font-size: 16px;
-            word-break: break-word;
-        }
-
-        .buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            border: 0;
-            border-radius: 8px;
-            padding: 12px 18px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            background: #333;
-            color: white;
-        }
-
-        button:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        #startBtn {
-            background: #198754;
-        }
-
-        #stopBtn {
-            background: #dc3545;
+            grid-template-columns: 1fr;
         }
 
         #log {
+            height: 360px;
+            font-size: 11px;
+        }
+
+        button {
             width: 100%;
-            height: 420px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-word;
-
-            background: #050505;
-            border: 1px solid #292929;
-            border-radius: 8px;
-
-            padding: 12px;
-
-            font-family:
-                ui-monospace,
-                SFMono-Regular,
-                Menlo,
-                Monaco,
-                Consolas,
-                "Liberation Mono",
-                monospace;
-
-            font-size: 12px;
-            line-height: 1.45;
         }
+    }
+</style>
+```
 
-        .warning {
-            color: #ffcc66;
-        }
-
-        .success {
-            color: #66dd88;
-        }
-
-        .error {
-            color: #ff6666;
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-
-            .status {
-                grid-template-columns: 1fr;
-            }
-
-            #log {
-                height: 360px;
-                font-size: 11px;
-            }
-
-            button {
-                width: 100%;
-            }
-        }
-    </style>
 </head>
 
 <body>
 
 <div class="container">
 
-    <h1>MoneroMiner WASM</h1>
+```
+<h1>MoneroMiner WASM</h1>
 
-    <div class="subtitle">
-        RandomX + Emscripten + WasmJit
-    </div>
+<div class="subtitle">
+    RandomX + Emscripten + WasmJit
+</div>
 
-    <div class="panel">
+<div class="panel">
 
-        <div class="status">
+    <div class="status">
 
-            <div class="status-box">
-                <div class="label">CPU threads</div>
-                <div class="value" id="threads">detectando...</div>
-            </div>
-
-            <div class="status-box">
-                <div class="label">Emscripten</div>
-                <div class="value" id="emscriptenStatus">
-                    aguardando...
-                </div>
-            </div>
-
-            <div class="status-box">
-                <div class="label">Miner</div>
-                <div class="value" id="minerStatus">
-                    parado
-                </div>
-            </div>
-
-            <div class="status-box">
-                <div class="label">WasmJit</div>
-                <div class="value" id="jitStatus">
-                    aguardando...
-                </div>
-            </div>
-
+        <div class="status-box">
+            <div class="label">CPU threads</div>
+            <div class="value" id="threads">detectando...</div>
         </div>
 
-    </div>
-
-    <div class="panel">
-
-        <div class="buttons">
-
-            <button
-                id="startBtn"
-                disabled
-            >
-                Iniciar mineração
-            </button>
-
-            <button
-                id="stopBtn"
-                disabled
-            >
-                Parar mineração
-            </button>
-
+        <div class="status-box">
+            <div class="label">Emscripten</div>
+            <div class="value" id="emscriptenStatus">
+                aguardando...
+            </div>
         </div>
 
-    </div>
+        <div class="status-box">
+            <div class="label">Miner</div>
+            <div class="value" id="minerStatus">
+                parado
+            </div>
+        </div>
 
-    <div class="panel">
-
-        <div class="label">Console</div>
-
-        <div id="log"></div>
+        <div class="status-box">
+            <div class="label">WasmJit</div>
+            <div class="value" id="jitStatus">
+                aguardando...
+            </div>
+        </div>
 
     </div>
 
 </div>
 
+<div class="panel">
+
+    <div class="buttons">
+
+        <button
+            id="startBtn"
+            disabled
+        >
+            Iniciar mineração
+        </button>
+
+        <button
+            id="stopBtn"
+            disabled
+        >
+            Parar mineração
+        </button>
+
+    </div>
+
+</div>
+
+<div class="panel">
+
+    <div class="label">Console</div>
+
+    <div id="log"></div>
+
+</div>
+```
+
+</div>
+
+<!-- ============================================================
+     CARTEIRA
+     ============================================================ -->
+
 <div class="wallet-box">
-    <label for="walletInput">Endereço Monero</label>
 
-    <input
-        id="walletInput"
-        type="text"
-        inputmode="text"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        placeholder="4... ou 8..."
-    >
+```
+<label for="walletInput">
+    Endereço Monero
+</label>
 
-    <button id="applyWallet">
-        Usar carteira
-    </button>
+<input
+    id="walletInput"
+    type="text"
+    inputmode="text"
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    placeholder="4... ou 8..."
+>
 
-    <div id="walletStatus"></div>
+<button id="applyWallet">
+    Usar carteira
+</button>
+
+<div id="walletStatus"></div>
+```
+
+</div>
+
+<!-- ============================================================
+     WORKER
+     ============================================================ -->
+
+<div class="worker-box">
+
+```
+<label for="workerInput">
+    Nome do Worker
+</label>
+
+<input
+    id="workerInput"
+    type="text"
+    inputmode="text"
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    maxlength="64"
+    placeholder="worker1"
+>
+
+<div id="workerStatus">
+    O nome identifica este dispositivo no pool.
+</div>
+```
+
 </div>
 
 <script>
@@ -273,10 +401,14 @@
  * ============================================================
  */
 
-const logElement = document.getElementById("log");
+const logElement =
+    document.getElementById("log");
 
-const startButton = document.getElementById("startBtn");
-const stopButton = document.getElementById("stopBtn");
+const startButton =
+    document.getElementById("startBtn");
+
+const stopButton =
+    document.getElementById("stopBtn");
 
 const threadsElement =
     document.getElementById("threads");
@@ -289,6 +421,21 @@ const minerStatusElement =
 
 const jitStatusElement =
     document.getElementById("jitStatus");
+
+const walletInput =
+    document.getElementById("walletInput");
+
+const applyWallet =
+    document.getElementById("applyWallet");
+
+const walletStatus =
+    document.getElementById("walletStatus");
+
+const workerInput =
+    document.getElementById("workerInput");
+
+const workerStatus =
+    document.getElementById("workerStatus");
 
 
 /*
@@ -307,7 +454,8 @@ function log(message) {
         return;
     }
 
-    logElement.textContent += text + "\n";
+    logElement.textContent +=
+        text + "\n";
 
     logElement.scrollTop =
         logElement.scrollHeight;
@@ -320,27 +468,33 @@ function log(message) {
  * ============================================================
  */
 
-window.addEventListener("error", function(event) {
+window.addEventListener(
+    "error",
+    function(event) {
 
-    log(
-        "[JS-ERROR] " +
-        (event.message || "Erro JavaScript")
-    );
-
-    if (event.filename) {
         log(
-            "[JS-ERROR] arquivo: " +
-            event.filename
+            "[JS-ERROR] " +
+            (event.message ||
+             "Erro JavaScript")
         );
-    }
 
-    if (event.lineno) {
-        log(
-            "[JS-ERROR] linha: " +
-            event.lineno
-        );
+        if (event.filename) {
+
+            log(
+                "[JS-ERROR] arquivo: " +
+                event.filename
+            );
+        }
+
+        if (event.lineno) {
+
+            log(
+                "[JS-ERROR] linha: " +
+                event.lineno
+            );
+        }
     }
-});
+);
 
 
 window.addEventListener(
@@ -374,7 +528,9 @@ const hardwareThreads =
 const threadsOtimizadas =
     Math.max(
         1,
-        Math.floor(hardwareThreads / 2)
+        Math.floor(
+            hardwareThreads / 2
+        )
     );
 
 
@@ -394,6 +550,66 @@ log(
     "[SISTEMA] Threads selecionados: " +
     threadsOtimizadas
 );
+
+
+/*
+ * ============================================================
+ * WORKER
+ * ============================================================
+ *
+ * Cada dispositivo pode usar um nome diferente:
+ *
+ * worker1
+ * worker2
+ * iphone
+ * a03s
+ * celular-1
+ *
+ * O valor é salvo localmente para que o mesmo aparelho
+ * continue usando o mesmo worker na próxima visita.
+ * ============================================================
+ */
+
+const savedWorker =
+    localStorage.getItem(
+        "moneroMinerWorker"
+    );
+
+
+workerInput.value =
+    savedWorker || "worker1";
+
+
+workerInput.addEventListener(
+    "input",
+    function() {
+
+        const worker =
+            workerInput.value.trim();
+
+        if (worker) {
+
+            localStorage.setItem(
+                "moneroMinerWorker",
+                worker
+            );
+
+            workerStatus.textContent =
+                "Worker atual: " +
+                worker;
+
+        } else {
+
+            workerStatus.textContent =
+                "Digite um nome para o worker.";
+        }
+    }
+);
+
+
+workerStatus.textContent =
+    "Worker atual: " +
+    workerInput.value;
 
 
 /*
@@ -427,7 +643,8 @@ window.Module = {
      * Pthreads/Emscripten
      */
 
-    numThreads: threadsOtimizadas,
+    numThreads:
+        threadsOtimizadas,
 
 
     /*
@@ -446,7 +663,10 @@ window.Module = {
 
     print: function(text) {
 
-        log("[WASM] " + text);
+        log(
+            "[WASM] " +
+            text
+        );
     },
 
 
@@ -456,7 +676,10 @@ window.Module = {
 
     printErr: function(text) {
 
-        log("[WASM-ERR] " + text);
+        log(
+            "[WASM-ERR] " +
+            text
+        );
     },
 
 
@@ -532,7 +755,9 @@ window.Module = {
                 key.startsWith("_")
             ) {
 
-                exportsEncontrados.push(key);
+                exportsEncontrados.push(
+                    key
+                );
             }
         }
 
@@ -555,7 +780,8 @@ window.Module = {
 
 
         /*
-         * Verificar especificamente o startMining.
+         * startMining é mantido como export direto
+         * para compatibilidade.
          */
 
         if (
@@ -577,8 +803,8 @@ window.Module = {
 
 
             /*
-             * Caso o projeto use ccall com função
-             * exportada de outra maneira.
+             * O C++ também disponibiliza startMining
+             * através do ccall.
              */
 
             if (
@@ -603,6 +829,21 @@ window.Module = {
  * ============================================================
  * START MINING
  * ============================================================
+ *
+ * IMPORTANTE:
+ *
+ * O C++ possui:
+ *
+ * startMining(
+ *     const char* customWallet,
+ *     const char* customWorker
+ * )
+ *
+ * Portanto, aqui passamos os DOIS valores diretamente.
+ *
+ * Não usamos Module._startMining() sem argumentos,
+ * porque isso perderia o nome do worker.
+ * ============================================================
  */
 
 function startMining() {
@@ -612,8 +853,153 @@ function startMining() {
     );
 
 
+    const wallet =
+        walletInput.value.trim();
+
+    let worker =
+        workerInput.value.trim();
+
+
     /*
-     * Primeiro tenta o export direto.
+     * Worker padrão.
+     */
+
+    if (!worker) {
+
+        worker = "worker1";
+
+        workerInput.value =
+            worker;
+    }
+
+
+    /*
+     * Salvar worker.
+     */
+
+    localStorage.setItem(
+        "moneroMinerWorker",
+        worker
+    );
+
+
+    log(
+        "[MINER] Worker: " +
+        worker
+    );
+
+
+    /*
+     * A carteira é obrigatória quando
+     * estamos usando o campo da página.
+     */
+
+    if (!wallet) {
+
+        log(
+            "[MINER-ERROR] Nenhuma carteira foi informada."
+        );
+
+        walletStatus.textContent =
+            "Digite um endereço Monero antes de iniciar.";
+
+        return;
+    }
+
+
+    /*
+     * Verificar WASM.
+     */
+
+    if (
+        typeof Module ===
+        "undefined"
+    ) {
+
+        log(
+            "[MINER-ERROR] Module ainda não existe."
+        );
+
+        return;
+    }
+
+
+    /*
+     * O startMining do C++ é exportado/keep-alive
+     * e pode ser chamado através do ccall.
+     */
+
+    if (
+        typeof Module.ccall ===
+        "function"
+    ) {
+
+        try {
+
+            log(
+                "[MINER] Chamando startMining(wallet, worker)..."
+            );
+
+
+            const result =
+                Module.ccall(
+                    "startMining",
+                    "number",
+                    [
+                        "string",
+                        "string"
+                    ],
+                    [
+                        wallet,
+                        worker
+                    ]
+                );
+
+
+            log(
+                "[MINER] startMining retornou: " +
+                String(result)
+            );
+
+
+            /*
+             * O retorno esperado normalmente é sucesso
+             * quando a função consegue iniciar.
+             */
+
+            minerStatusElement.textContent =
+                "minerando";
+
+            startButton.disabled = true;
+            stopButton.disabled = false;
+
+
+            walletStatus.textContent =
+                "Carteira + worker configurados.";
+
+
+            workerStatus.textContent =
+                "Worker ativo: " +
+                worker;
+
+
+            return;
+
+        } catch (error) {
+
+            log(
+                "[MINER-ERROR] startMining(): " +
+                String(error)
+            );
+        }
+    }
+
+
+    /*
+     * Fallback para o export antigo.
+     *
+     * Só é usado se o startMining com argumentos
+     * não estiver disponível.
      */
 
     if (
@@ -622,7 +1008,7 @@ function startMining() {
     ) {
 
         log(
-            "[MINER] Chamando Module._startMining()..."
+            "[MINER] Fallback: Module._startMining()..."
         );
 
         try {
@@ -643,68 +1029,6 @@ function startMining() {
                 "[MINER-ERROR] _startMining(): " +
                 String(error)
             );
-        }
-    }
-
-
-    /*
-     * Depois tenta ccall.
-     */
-
-    if (
-        typeof Module.ccall ===
-        "function"
-    ) {
-
-        const possibleNames = [
-            "startMining",
-            "start_mining",
-            "start"
-        ];
-
-
-        for (
-            const name of possibleNames
-        ) {
-
-            try {
-
-                log(
-                    "[MINER] Tentando ccall('" +
-                    name +
-                    "')..."
-                );
-
-                Module.ccall(
-                    name,
-                    null,
-                    [],
-                    []
-                );
-
-                log(
-                    "[MINER] ccall('" +
-                    name +
-                    "') executado."
-                );
-
-                minerStatusElement.textContent =
-                    "minerando";
-
-                startButton.disabled = true;
-                stopButton.disabled = false;
-
-                return;
-
-            } catch (error) {
-
-                log(
-                    "[MINER] '" +
-                    name +
-                    "' não disponível: " +
-                    String(error)
-                );
-            }
         }
     }
 
@@ -1017,7 +1341,6 @@ log(
 
 </script>
 
-
 <script
     src="/bin/miner.js"
     onload="
@@ -1028,7 +1351,6 @@ log(
         minerStatusElement.textContent = 'erro';
     "
 ></script>
-
 
 <script>
 /*
@@ -1156,68 +1478,94 @@ log(
 </script>
 
 <script>
-const walletInput = document.getElementById("walletInput");
-const applyWallet = document.getElementById("applyWallet");
-const walletStatus = document.getElementById("walletStatus");
+/*
+ * ============================================================
+ * CONFIGURAÇÃO DA CARTEIRA
+ * ============================================================
+ */
 
-applyWallet.addEventListener("click", () => {
+applyWallet.addEventListener(
+    "click",
+    function() {
 
-    const wallet = walletInput.value.trim();
+        const wallet =
+            walletInput.value.trim();
 
-    if (!wallet) {
-        walletStatus.textContent =
-            "Digite um endereço Monero.";
-        return;
-    }
 
-    if (typeof Module === "undefined") {
-        walletStatus.textContent =
-            "WASM ainda não foi inicializado.";
-        return;
-    }
-
-    if (typeof Module.ccall !== "function") {
-        walletStatus.textContent =
-            "Module.ccall ainda não está disponível.";
-        return;
-    }
-
-    try {
-
-        const result = Module.ccall(
-            "setWalletFromWeb",
-            "number",
-            ["string"],
-            [wallet]
-        );
-
-        if (result === 1) {
+        if (!wallet) {
 
             walletStatus.textContent =
-                "Carteira configurada. Agora você pode iniciar a mineração.";
+                "Digite um endereço Monero.";
 
-            console.log(
-                "[WALLET] Carteira configurada no WASM."
-            );
-
-        } else {
-
-            walletStatus.textContent =
-                "Endereço inválido. Use um endereço Monero mainnet de 95 caracteres começando com 4 ou 8.";
-
+            return;
         }
 
-    } catch (error) {
 
-        console.error(
-            "[WALLET] Erro ao configurar carteira:",
-            error
-        );
+        if (
+            typeof Module ===
+            "undefined"
+        ) {
 
-        walletStatus.textContent =
-            "Erro ao configurar a carteira no WASM.";
+            walletStatus.textContent =
+                "WASM ainda não foi inicializado.";
+
+            return;
+        }
+
+
+        if (
+            typeof Module.ccall !==
+            "function"
+        ) {
+
+            walletStatus.textContent =
+                "Module.ccall ainda não está disponível.";
+
+            return;
+        }
+
+
+        try {
+
+            const result =
+                Module.ccall(
+                    "setWalletFromWeb",
+                    "number",
+                    ["string"],
+                    [wallet]
+                );
+
+
+            if (
+                result === 1
+            ) {
+
+                walletStatus.textContent =
+                    "Carteira configurada. Agora você pode iniciar a mineração.";
+
+                console.log(
+                    "[WALLET] Carteira configurada no WASM."
+                );
+
+            } else {
+
+                walletStatus.textContent =
+                    "Endereço inválido. Use um endereço Monero mainnet de 95 caracteres começando com 4 ou 8.";
+            }
+
+        } catch (error) {
+
+            console.error(
+                "[WALLET] Erro ao configurar carteira:",
+                error
+            );
+
+            walletStatus.textContent =
+                "Erro ao configurar a carteira no WASM.";
+        }
     }
-});
+);
+
 </script>
 
 </body>
